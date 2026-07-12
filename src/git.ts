@@ -1,3 +1,5 @@
+// Git integration: commit info, merge-base, default branch, dirty check, and author identity.
+
 import { execFile } from 'node:child_process';
 import type * as vscode from 'vscode';
 
@@ -11,6 +13,7 @@ export interface GitContext {
   getMergeBase(a: string, b: string): Promise<string | undefined>;
   getDefaultBranch(): Promise<string | undefined>;
   isDirty(): Promise<boolean>;
+  getAuthor(): Promise<{ name: string; email?: string }>;
 }
 
 function git(
@@ -72,6 +75,27 @@ export async function getGitContext(
         return stdout.trim().length > 0;
       } catch {
         return false;
+      }
+    },
+
+    async getAuthor(): Promise<{ name: string; email?: string }> {
+      const { stdout: nameOut } = await git(
+        cwd,
+        'config',
+        '--get',
+        'user.name'
+      );
+      const name = nameOut.trim();
+      try {
+        const { stdout: emailOut } = await git(
+          cwd,
+          'config',
+          '--get',
+          'user.email'
+        );
+        return { name, email: emailOut.trim() || undefined };
+      } catch {
+        return { name };
       }
     },
   };

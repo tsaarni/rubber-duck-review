@@ -1,22 +1,22 @@
+// Per-workspace-folder review lifecycle: start, stop, switch, export, and comment delegation.
+
+import * as os from 'node:os';
 import * as vscode from 'vscode';
-import { getCurrentAuthor } from './author';
-import type { ReviewCommentImpl } from './comment';
+import type { ReviewCommentImpl } from './comment-model';
 import { ReviewCommentController } from './controller';
 import type { CommitInfo, GitContext } from './git';
 import { logger } from './logger';
-import type { ReviewStore } from './store';
+import type { AuthorInfo, ReviewStore } from './store';
 
-/**
- * Per-workspace-folder review lifecycle manager.
- */
 export class ReviewManager implements vscode.Disposable {
   private readonly store: ReviewStore;
   private readonly workspaceRoot: vscode.Uri;
   private readonly gitContext: GitContext | undefined;
   private controller: ReviewCommentController | undefined;
   private readonly onStateChange: () => void;
+  private _author: AuthorInfo | undefined;
 
-  /** Public so extension.ts can query aggregate state. */
+  /** Public so extension.ts can read aggregate state. */
   public activeReviewId: string | undefined;
 
   constructor(
@@ -47,19 +47,12 @@ export class ReviewManager implements vscode.Disposable {
     return review?.comments.length ?? 0;
   }
 
-  // ────────────────────────────────────────────
-  // Review lifecycle
-  // ────────────────────────────────────────────
+  // ── Review lifecycle ──
 
-  /**
-   * Starts (or resumes) a review for this workspace folder.
-   * Determines commit context, auto-resumes matching review,
-   * or shows a quick pick.
-   */
+  /** Start or resume a review. Auto-resumes a review matching the current base commit, or shows a quick pick. */
   async startReview(): Promise<void> {
     const commitCtx = await this.determineCommitContext();
 
-    // Check if a review already exists with the same base
     if (commitCtx?.baseCommit) {
       const existing = this.store.findByBase(commitCtx.baseCommit.id);
       if (existing) {
@@ -73,12 +66,10 @@ export class ReviewManager implements vscode.Disposable {
       .filter((r) => r.comments.length > 0);
 
     if (reviews.length === 0) {
-      // No existing reviews — create a new one
       await this.createNewReview(commitCtx);
       return;
     }
 
-    // Show quick pick: new review or pick existing
     const items: vscode.QuickPickItem[] = [
       { label: '$(plus) Start new review', description: '' },
       ...reviews.map((r) => ({
@@ -94,15 +85,13 @@ export class ReviewManager implements vscode.Disposable {
       placeHolder: 'Select a review or start a new one',
     });
 
-    if (!pick) {
-      return; // user cancelled
-    }
+    if (!pick) return;
 
     if (pick.label.startsWith('$(plus)')) {
       await this.createNewReview(commitCtx);
     } else {
-      // Find the review by matching the detail (base commit)
-      const idx = items.indexOf(pick) - 1; // skip the "new review" item
+      // skip the "new review" item
+      const idx = items.indexOf(pick) - 1;
       const selected = reviews[idx];
       if (selected) {
         await this.activateReview(selected.id);
@@ -110,17 +99,13 @@ export class ReviewManager implements vscode.Disposable {
     }
   }
 
-  /**
-   * Force-create a new review, regardless of existing ones.
-   */
+  /** Create a new review. */
   async newReview(): Promise<void> {
     const commitCtx = await this.determineCommitContext();
     await this.createNewReview(commitCtx);
   }
 
-  /**
-   * Show a quick pick of all reviews and switch to the selected one.
-   */
+  /** Show a quick pick of all reviews and switch to the selected one. */
   async switchReview(): Promise<void> {
     const reviews = this.store.getReviews();
 
@@ -144,29 +129,20 @@ export class ReviewManager implements vscode.Disposable {
       placeHolder: 'Select a review to load',
     });
 
-    if (!pick) {
-      return;
-    }
+    if (!pick) return;
 
     this.cleanupReview();
     await this.activateReview(pick.id);
   }
 
-  /**
-   * Stop the active review without deleting it.
-   * Comments are preserved and can be resumed later.
-   */
+  /** Stop the active review. Comments are preserved. */
   stopReview(): void {
-    if (!this.activeReviewId) {
-      return;
-    }
+    if (!this.activeReviewId) return;
     this.cleanupReview();
     vscode.window.showInformationMessage('Review stopped.');
   }
 
-  /**
-   * Delete the active review after confirmation.
-   */
+  /** Delete the active review after confirmation. */
   async clearReview(): Promise<void> {
     if (!this.activeReviewId) {
       vscode.window.showInformationMessage('No active review to clear.');
@@ -179,9 +155,7 @@ export class ReviewManager implements vscode.Disposable {
       'Delete'
     );
 
-    if (confirm !== 'Delete') {
-      return;
-    }
+    if (confirm !== 'Delete') return;
 
     const id = this.activeReviewId;
     this.cleanupReview();
@@ -189,9 +163,7 @@ export class ReviewManager implements vscode.Disposable {
     vscode.window.showInformationMessage('Review deleted.');
   }
 
-  /**
-   * Delete all reviews for this folder after confirmation.
-   */
+  /** Delete all reviews for this folder after confirmation. */
   async deleteAllReviews(): Promise<void> {
     const confirm = await vscode.window.showWarningMessage(
       `Delete ALL reviews for "${this.folderName}"?`,
@@ -199,18 +171,14 @@ export class ReviewManager implements vscode.Disposable {
       'Delete All'
     );
 
-    if (confirm !== 'Delete All') {
-      return;
-    }
+    if (confirm !== 'Delete All') return;
 
     this.cleanupReview();
     await this.store.deleteAllReviews();
     vscode.window.showInformationMessage('All reviews deleted.');
   }
 
-  // ────────────────────────────────────────────
-  // Comment delegation to the active controller
-  // ────────────────────────────────────────────
+  // ── Comment delegation ──
 
   async createComment(
     thread: vscode.CommentThread,
@@ -243,20 +211,21 @@ export class ReviewManager implements vscode.Disposable {
     this.controller?.cancelEditComment(comment);
   }
 
-  /**
-   * Export the active review as Markdown.
-   */
+  /** Export the active review as Markdown. */
   async exportMarkdown(): Promise<void> {
     if (!this.activeReviewId) {
       vscode.window.showInformationMessage('No active review to export.');
       return;
     }
 
+    const author = await this.resolveAuthor();
+
     let markdown: string;
     try {
       markdown = await this.store.exportMarkdown(
         this.activeReviewId,
-        this.workspaceRoot
+        this.workspaceRoot,
+        author
       );
     } catch (err) {
       logger.error(`Export failed: ${err}`);
@@ -271,9 +240,7 @@ export class ReviewManager implements vscode.Disposable {
       filters: { Markdown: ['md'] },
     });
 
-    if (!uri) {
-      return; // user cancelled
-    }
+    if (!uri) return;
 
     try {
       await vscode.workspace.fs.writeFile(
@@ -289,9 +256,40 @@ export class ReviewManager implements vscode.Disposable {
     }
   }
 
-  // ────────────────────────────────────────────
-  // Internal
-  // ────────────────────────────────────────────
+  // ── Internal ──
+
+  /** Resolve author from git config. Falls back to OS username, then environment variables. Cached after first call. */
+  private async resolveAuthor(): Promise<AuthorInfo> {
+    if (this._author) return this._author;
+
+    if (this.gitContext) {
+      try {
+        const gitAuthor = await this.gitContext.getAuthor();
+        if (gitAuthor.name) {
+          this._author = gitAuthor;
+          return this._author;
+        }
+      } catch {}
+    }
+
+    try {
+      const username = os.userInfo().username;
+      if (username) {
+        this._author = { name: username };
+        return this._author;
+      }
+    } catch {}
+
+    // Last resort: environment variables
+    this._author = {
+      name:
+        process.env.USER ??
+        process.env.LOGNAME ??
+        process.env.USERNAME ??
+        'Unknown',
+    };
+    return this._author;
+  }
 
   private async determineCommitContext(): Promise<{
     baseCommit: CommitInfo | null;
@@ -299,21 +297,16 @@ export class ReviewManager implements vscode.Disposable {
     isDirty: boolean;
   }> {
     if (!this.gitContext) {
-      return {
-        baseCommit: null,
-        headCommit: null,
-        isDirty: false,
-      };
+      return { baseCommit: null, headCommit: null, isDirty: false };
     }
 
     try {
       const isDirty = await this.gitContext.isDirty();
-      const headRef = 'HEAD';
       let headCommit: CommitInfo | null = null;
       let baseCommit: CommitInfo | null = null;
 
       try {
-        headCommit = await this.gitContext.getCommit(headRef);
+        headCommit = await this.gitContext.getCommit('HEAD');
       } catch {
         // No commits yet
       }
@@ -335,8 +328,7 @@ export class ReviewManager implements vscode.Disposable {
             baseCommit = headCommit;
           }
         } else {
-          // No remote — use HEAD as base. The review captures the
-          // current commit; working-tree changes are tracked via isDirty.
+          // No remote — use HEAD as base. Working-tree changes are tracked via isDirty.
           baseCommit = headCommit;
         }
       }
@@ -344,11 +336,7 @@ export class ReviewManager implements vscode.Disposable {
       return { baseCommit, headCommit, isDirty };
     } catch (err) {
       logger.warn(`Failed to determine git context: ${err}`);
-      return {
-        baseCommit: null,
-        headCommit: null,
-        isDirty: false,
-      };
+      return { baseCommit: null, headCommit: null, isDirty: false };
     }
   }
 
@@ -357,7 +345,7 @@ export class ReviewManager implements vscode.Disposable {
     headCommit: CommitInfo | null;
     isDirty: boolean;
   }): Promise<void> {
-    const author = getCurrentAuthor();
+    const author = await this.resolveAuthor();
 
     try {
       const review = await this.store.createReview(
@@ -379,11 +367,12 @@ export class ReviewManager implements vscode.Disposable {
   private async activateReview(reviewId: string): Promise<void> {
     this.cleanupReview();
 
+    const author = await this.resolveAuthor();
     const controller = new ReviewCommentController(
       this.store,
       reviewId,
       this.workspaceRoot,
-      getCurrentAuthor
+      author
     );
 
     await controller.initialize();

@@ -1,14 +1,13 @@
+// Persistent storage for reviews and comments, backed by a JSON file.
+
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { getCurrentAuthor } from './author';
 import type { CommitInfo } from './git';
 import { logger } from './logger';
 
-// ──────────────────────────────────────────────
-// Types  (mirror reviews-schema.json)
-// ──────────────────────────────────────────────
+// ── Types (mirrors reviews-schema.json) ──
 
 export interface AuthorInfo {
   name: string;
@@ -22,8 +21,8 @@ export interface ReviewComment {
   endLine?: number; // Required for LINE, omitted for FILE
   subjectType: 'LINE' | 'FILE';
   body: string;
-  author?: AuthorInfo; // Author of this specific comment
-  createdAt: string; // ISO 8601
+  author?: AuthorInfo;
+  createdAt: string;
 }
 
 export interface Review {
@@ -41,9 +40,7 @@ interface ReviewsFile {
   reviews: Review[];
 }
 
-// ──────────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────────
+// ── Helpers ──
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -53,9 +50,7 @@ function newUUID(): string {
   return crypto.randomUUID();
 }
 
-// ──────────────────────────────────────────────
-// Store
-// ──────────────────────────────────────────────
+// ── Store ──
 
 export class ReviewStore {
   private readonly filePath: string;
@@ -101,7 +96,6 @@ export class ReviewStore {
       return new ReviewStore(filePath, data);
     }
 
-    // Version check
     if (data.version !== 1) {
       logger.error(
         `Reviews file has unsupported version ${data.version}. Expected 1. Starting with empty reviews.`
@@ -224,9 +218,7 @@ export class ReviewStore {
 
   async deleteComment(reviewId: string, commentId: string): Promise<void> {
     const review = this.getReview(reviewId);
-    if (!review) {
-      return;
-    }
+    if (!review) return;
     const idx = review.comments.findIndex((c) => c.id === commentId);
     if (idx !== -1) {
       review.comments.splice(idx, 1);
@@ -234,12 +226,11 @@ export class ReviewStore {
     }
   }
 
-  /**
-   * Generates a Markdown export of the review.
-   */
+  /** Generate a Markdown export of the review. */
   async exportMarkdown(
     reviewId: string,
-    workspaceRoot: vscode.Uri
+    workspaceRoot: vscode.Uri,
+    author?: AuthorInfo
   ): Promise<string> {
     const review = this.getReview(reviewId);
     if (!review) {
@@ -248,17 +239,13 @@ export class ReviewStore {
 
     const lines: string[] = [];
 
-    // Header
     const folderName = path.basename(workspaceRoot.fsPath);
     lines.push(`# Code Review: ${folderName}`);
     lines.push('');
 
-    // Metadata
-    const { name: userName, email: userEmail } = getCurrentAuthor();
-    const authorStr =
-      userName || userEmail
-        ? `**Author:** ${userName}${userEmail ? ` <${userEmail}>` : ''}`
-        : '';
+    const userName = author?.name ?? 'Unknown';
+    const userEmail = author?.email;
+    const authorStr = `**Author:** ${userName}${userEmail ? ` <${userEmail}>` : ''}`;
     if (authorStr) {
       lines.push(authorStr);
     }
@@ -276,7 +263,6 @@ export class ReviewStore {
     }
     lines.push('');
 
-    // Comments
     for (const comment of review.comments) {
       lines.push('---', '');
       const displayPath = comment.path.replace(/\\/g, '/');
@@ -293,7 +279,7 @@ export class ReviewStore {
       );
       lines.push('');
 
-      // Code snippet (only for LINE comments)
+      // Code snippet for LINE comments
       if (
         comment.subjectType === 'LINE' &&
         comment.startLine != null &&
@@ -315,8 +301,8 @@ export class ReviewStore {
         lines.push('');
       }
 
-      // Comment body in blockquote — escape content that would break the blockquote structure
-      const commentAuthor = comment.author?.name || userName;
+      // Comment body in blockquote
+      const commentAuthor = comment.author?.name || author?.name || 'Unknown';
       lines.push(`${commentAuthor} wrote:`);
       const escapedBody = escapeForBlockquote(comment.body);
       lines.push(`> ${escapedBody.replace(/\n/g, '\n> ')}`);
@@ -336,10 +322,7 @@ export class ReviewStore {
     return review?.comments.find((c) => c.id === commentId);
   }
 
-  /**
-   * Atomic save: write to a temp file in the same directory, then rename.
-   * This prevents partial writes from corrupting the reviews file.
-   */
+  /** Atomic save: write to a temp file then rename. Prevents corruption from partial writes. */
   private async save(): Promise<void> {
     const raw = new TextEncoder().encode(JSON.stringify(this.data, null, 2));
 
@@ -393,13 +376,10 @@ async function readSnippet(
 
 // ── Markdown escaping ──
 
-/**
- * Escape content for embedding in a markdown blockquote.
- * Prevents code fences and headings from breaking out of the blockquote.
- */
+/** Escape content for embedding in a markdown blockquote. */
 function escapeForBlockquote(body: string): string {
   return body
-    .replace(/^```/gm, '\\`\\`\\`') // escape code fences
-    .replace(/^#/gm, '\\#') // escape headings
-    .replace(/^>/gm, '\\>'); // escape nested blockquotes
+    .replace(/^```/gm, '\\`\\`\\`')
+    .replace(/^#/gm, '\\#')
+    .replace(/^>/gm, '\\>');
 }

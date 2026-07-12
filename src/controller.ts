@@ -1,19 +1,17 @@
+// Manages VS Code comment threads for a single active review.
+
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { ReviewCommentImpl } from './comment';
-import { buildSuggestionBlock } from './comments';
+import { ReviewCommentImpl } from './comment-model';
 import { logger } from './logger';
-import type { ReviewComment, ReviewStore } from './store';
+import type { AuthorInfo, ReviewComment, ReviewStore } from './store';
 
-/**
- * One ReviewCommentController per active review.
- */
 export class ReviewCommentController implements vscode.Disposable {
   private readonly controller: vscode.CommentController;
   private readonly store: ReviewStore;
   private readonly reviewId: string;
   private readonly workspaceRoot: vscode.Uri;
-  private readonly getAuthor: () => { name: string };
+  private author: AuthorInfo;
 
   // Maps store comment ID → ReviewCommentImpl
   private readonly comments = new Map<string, ReviewCommentImpl>();
@@ -22,12 +20,12 @@ export class ReviewCommentController implements vscode.Disposable {
     store: ReviewStore,
     reviewId: string,
     workspaceRoot: vscode.Uri,
-    getAuthor: () => { name: string }
+    author: AuthorInfo
   ) {
     this.store = store;
     this.reviewId = reviewId;
     this.workspaceRoot = workspaceRoot;
-    this.getAuthor = getAuthor;
+    this.author = author;
 
     const safePath = workspaceRoot.fsPath
       .replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -85,6 +83,12 @@ export class ReviewCommentController implements vscode.Disposable {
     return;
   }
 
+  // ── Suggestion block ──
+
+  private buildSuggestionBlock(selectedText: string): string {
+    return `\`\`\`suggestion\n${selectedText.trimEnd()}\n\`\`\``;
+  }
+
   // ── Comment CRUD ──
 
   async createComment(
@@ -100,7 +104,6 @@ export class ReviewCommentController implements vscode.Disposable {
     const endLine = range ? range.end.line + 1 : 1;
 
     try {
-      const author = this.getAuthor();
       const storeComment = await this.store.addComment(
         this.reviewId,
         relativePath,
@@ -108,7 +111,7 @@ export class ReviewCommentController implements vscode.Disposable {
         endLine,
         subjectType,
         input,
-        author
+        this.author
       );
 
       const comment = new ReviewCommentImpl(
@@ -130,10 +133,7 @@ export class ReviewCommentController implements vscode.Disposable {
     }
   }
 
-  /**
-   * Create a new comment with a pre-filled suggestion block.
-   * The comment is created in editing mode so the user can modify it.
-   */
+  /** Create a comment pre-filled with a suggestion block, opened in editing mode. */
   async createSuggestion(
     uri: vscode.Uri,
     range: vscode.Range,
@@ -146,11 +146,9 @@ export class ReviewCommentController implements vscode.Disposable {
     const startLine = range ? range.start.line + 1 : 1;
     const endLine = range ? range.end.line + 1 : 1;
 
-    // Build suggestion block from selected text
-    const suggestionBody = buildSuggestionBlock(selectedText);
+    const suggestionBody = this.buildSuggestionBlock(selectedText);
 
     try {
-      const author = this.getAuthor();
       const storeComment = await this.store.addComment(
         this.reviewId,
         relativePath,
@@ -158,7 +156,7 @@ export class ReviewCommentController implements vscode.Disposable {
         endLine,
         subjectType,
         suggestionBody,
-        author
+        this.author
       );
 
       const thread = this.controller.createCommentThread(uri, range, []);
@@ -232,20 +230,14 @@ export class ReviewCommentController implements vscode.Disposable {
 
   // ── Helpers ──
 
-  /** Get author info, preferring stored comment author, falling back to current git user. */
+  /** Get author info, preferring stored comment author, falling back to current user. */
   private getAuthorInfo(
     storeComment: ReviewComment
   ): vscode.CommentAuthorInformation {
-    // Use stored author if available
     if (storeComment.author?.name) {
       return { name: storeComment.author.name };
     }
-    // Fall back to current git user
-    const current = this.getAuthor();
-    if (current?.name) {
-      return { name: current.name };
-    }
-    return { name: 'Unknown' };
+    return { name: this.author.name };
   }
 
   private createThreadForComment(storeComment: ReviewComment): void {

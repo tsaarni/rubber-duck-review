@@ -1,3 +1,5 @@
+// Thin wrapper around a VS Code LogOutputChannel for the extension.
+
 import type * as vscode from 'vscode';
 
 class Logger {

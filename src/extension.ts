@@ -1,30 +1,26 @@
+// Extension entry point: activation, commands, status bar, and workspace-folder lifecycle.
+
 import * as vscode from 'vscode';
-import type { ReviewCommentImpl } from './comment';
+import type { ReviewCommentImpl } from './comment-model';
 import { getGitContext } from './git';
 import { logger } from './logger';
 import { ReviewManager } from './manager';
 import { ReviewStore } from './store';
 
-// ──────────────────────────────────────────────
-// Module-level state
-// ──────────────────────────────────────────────
+// ── Module-level state ──
 
 const managers = new Map<string, ReviewManager>();
 let statusBarItem: vscode.StatusBarItem | undefined;
 let suggestionHintDecoration: vscode.TextEditorDecorationType | undefined;
 
-// ──────────────────────────────────────────────
-// Activation / Deactivation
-// ──────────────────────────────────────────────
+// ── Activation / Deactivation ──
 
 export function activate(context: vscode.ExtensionContext): void {
-  // Logger
   const channel = vscode.window.createOutputChannel('Rubber Duck Review', {
     log: true,
   });
   logger.init(channel);
 
-  // Status bar
   statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     100
@@ -143,9 +139,7 @@ export function deactivate(): void {
   statusBarItem = undefined;
 }
 
-// ──────────────────────────────────────────────
-// Manager factory
-// ──────────────────────────────────────────────
+// ── Manager factory ──
 
 async function createManager(folder: vscode.WorkspaceFolder): Promise<void> {
   try {
@@ -170,9 +164,7 @@ async function createManager(folder: vscode.WorkspaceFolder): Promise<void> {
   }
 }
 
-// ──────────────────────────────────────────────
-// Status bar
-// ──────────────────────────────────────────────
+// ── Status bar ──
 
 function updateStatusBar(): void {
   if (!statusBarItem) return;
@@ -182,18 +174,18 @@ function updateStatusBar(): void {
   );
 
   if (activeMgrs.length === 0) {
-    statusBarItem.text = '$(comment-discussion) Start Review';
+    statusBarItem.text = '🦆 Start Review';
     statusBarItem.command = 'rubberDuck.startReview';
     statusBarItem.tooltip = 'No active reviews. Click to start one.';
   } else if (activeMgrs.length === 1) {
     const m = activeMgrs[0];
-    statusBarItem.text = `$(comment-discussion) Reviewing ${m.folderName}`;
+    statusBarItem.text = `🦆 Reviewing ${m.folderName}`;
     statusBarItem.command = 'rubberDuck.stopReview';
     statusBarItem.tooltip = new vscode.MarkdownString(
       `${m.folderName}: ${m.commentCount} comment(s) — Click to stop review`
     );
   } else {
-    statusBarItem.text = `$(comment-discussion) ${activeMgrs.length} reviews`;
+    statusBarItem.text = `🦆 ${activeMgrs.length} reviews`;
     statusBarItem.command = 'rubberDuck.stopReview';
     const tooltipLines = activeMgrs.map(
       (m) => `- ${m.folderName}: ${m.commentCount} comment(s)`
@@ -226,9 +218,7 @@ function updateSuggestionHint(editor: vscode.TextEditor): void {
   editor.setDecorations(suggestionHintDecoration, [{ range }]);
 }
 
-// ──────────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────────
+// ── Helpers ──
 
 async function resolveManagerForCommand(): Promise<ReviewManager | undefined> {
   const mgrList = Array.from(managers.values());
@@ -276,9 +266,7 @@ function getManagerByThread(
   return managers.get(folder.uri.fsPath);
 }
 
-// ──────────────────────────────────────────────
-// Command handlers: user-facing
-// ──────────────────────────────────────────────
+// ── Command handlers: user-facing ──
 
 async function handleStartReview(): Promise<void> {
   const mgr = await resolveManagerForCommand();
@@ -348,9 +336,7 @@ async function handleExportMarkdown(): Promise<void> {
   }
 }
 
-// ──────────────────────────────────────────────
-// Command handlers: comment actions
-// ──────────────────────────────────────────────
+// ── Command handlers: comment actions ──
 
 async function handleCreateComment(
   threadOrReply:
