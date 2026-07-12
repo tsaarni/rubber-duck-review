@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/tsaarni/rubber-duck-review/refs/heads/main/reviews-schema.json",
+  "title": "Rubber Duck Review - Reviews File",
+  "description": "Schema for the .vscode/reviews.json file used by the Rubber Duck Review VS Code extension.",
+  "type": "object",
+  "required": ["version", "reviews"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Schema version for forward-compatibility.",
+      "const": 1
+    },
+    "author": {
+      "description": "Author who created the review.",
+      "$ref": "#/$defs/author"
+    },
+    "reviews": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/review" }
+    }
+  },
+  "$defs": {
+    "commit": {
+      "type": "object",
+      "description": "A git commit with its SHA and first line of message.",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Full SHA (40-character hex string) of the commit.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "message": {
+          "description": "First line of the commit message.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": ["id", "createdAt", "comments"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "UUID v4 identifying this review.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "baseCommit": {
+          "description": "Base commit with SHA and first line of message, or null if no git repository or no base could be determined.",
+          "oneOf": [{ "$ref": "#/$defs/commit" }, { "type": "null" }]
+        },
+        "headCommit": {
+          "description": "HEAD commit with SHA and first line of message, or null if no commits exist.",
+          "oneOf": [{ "$ref": "#/$defs/commit" }, { "type": "null" }]
+        },
+        "hasUncommittedChanges": {
+          "description": "Whether the working tree had uncommitted changes when the review was created.",
+          "type": "boolean"
+        },
+        "createdAt": {
+          "description": "ISO 8601 timestamp of review creation.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "comments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/comment" }
+        }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "required": ["id", "path", "subjectType", "body", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "UUID v4 identifying this comment.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "path": {
+          "description": "File path relative to the workspace root, using forward slashes.",
+          "type": "string",
+          "minLength": 1
+        },
+        "startLine": {
+          "description": "1-based start line number of the commented range. Required for LINE comments, omitted for FILE comments.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "endLine": {
+          "description": "1-based end line number of the commented range. Required for LINE comments, omitted for FILE comments.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "subjectType": {
+          "description": "Whether the comment is on a line range or file-level.",
+          "type": "string",
+          "enum": ["LINE", "FILE"]
+        },
+        "body": {
+          "description": "Markdown body of the comment. May contain ```suggestion code fences.",
+          "type": "string"
+        },
+        "createdAt": {
+          "description": "ISO 8601 timestamp of comment creation.",
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "if": {
+        "properties": { "subjectType": { "const": "LINE" } },
+        "required": ["subjectType"]
+      },
+      "then": {
+        "required": ["startLine", "endLine"]
+      }
+    },
+    "author": {
+      "type": "object",
+      "required": ["name", "email"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,143 @@
+{
+  "name": "rubber-duck-review",
+  "displayName": "Rubber Duck Review",
+  "description": "Local code review comments stored as JSON in the workspace.",
+  "version": "0.1.0",
+  "publisher": "tsaarni",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tsaarni/rubber-duck-review"
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "rubberDuck.startReview",
+        "title": "Rubber Duck: Start Review"
+      },
+      {
+        "command": "rubberDuck.newReview",
+        "title": "Rubber Duck: New Review"
+      },
+      {
+        "command": "rubberDuck.switchReview",
+        "title": "Rubber Duck: Switch Review"
+      },
+      {
+        "command": "rubberDuck.stopReview",
+        "title": "Rubber Duck: Stop Review"
+      },
+      {
+        "command": "rubberDuck.clearReview",
+        "title": "Rubber Duck: Clear Current Review"
+      },
+      {
+        "command": "rubberDuck.deleteAllReviews",
+        "title": "Rubber Duck: Delete All Reviews"
+      },
+      {
+        "command": "rubberDuck.exportMarkdown",
+        "title": "Rubber Duck: Export Review as Markdown"
+      },
+      {
+        "command": "rubberDuck.createComment",
+        "title": "Add Comment"
+      },
+      {
+        "command": "rubberDuck.editComment",
+        "title": "Edit",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "rubberDuck.deleteComment",
+        "title": "Delete",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "rubberDuck.saveComment",
+        "title": "Save",
+        "icon": "$(check)"
+      },
+      {
+        "command": "rubberDuck.cancelEditComment",
+        "title": "Cancel",
+        "icon": "$(close)"
+      },
+      {
+        "command": "rubberDuck.createSuggestion",
+        "title": "Rubber Duck: Make Suggestion",
+        "icon": "$(lightbulb)",
+        "enablement": "editorHasSelection"
+      }
+    ],
+    "menus": {
+      "comments/comment/title": [
+        {
+          "command": "rubberDuck.editComment",
+          "group": "inline@1",
+          "when": "commentController =~ /^rubber-duck-review/ && comment =~ /canEdit/"
+        },
+        {
+          "command": "rubberDuck.deleteComment",
+          "group": "inline@2",
+          "when": "commentController =~ /^rubber-duck-review/ && comment =~ /canDelete/"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "rubberDuck.saveComment",
+          "group": "inline@1",
+          "when": "commentController =~ /^rubber-duck-review/"
+        },
+        {
+          "command": "rubberDuck.cancelEditComment",
+          "group": "inline@2",
+          "when": "commentController =~ /^rubber-duck-review/"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "rubberDuck.createComment",
+          "when": "commentController =~ /^rubber-duck-review/"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Rubber Duck Review",
+      "properties": {
+        "rubberDuck.reviewsFilePath": {
+          "type": "string",
+          "default": ".vscode/reviews.json",
+          "description": "Path to the reviews file, relative to workspace root."
+        },
+        "rubberDuck.exportContextLines": {
+          "type": "number",
+          "default": 3,
+          "description": "Context lines around code snippets in markdown export."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "biome check .",
+    "format": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@types/node": "^26.1.1",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^6.0.0"
+  }
+}
