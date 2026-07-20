@@ -7,13 +7,13 @@ import { logger } from './logger';
 import { ReviewManager } from './manager';
 import { ReviewStore } from './store';
 
-// ── Module-level state ──
+// Module-level state
 
 const managers = new Map<string, ReviewManager>();
 let statusBarItem: vscode.StatusBarItem | undefined;
 let suggestionHintDecoration: vscode.TextEditorDecorationType | undefined;
 
-// ── Activation / Deactivation ──
+// Activation / Deactivation
 
 export function activate(context: vscode.ExtensionContext): void {
   const channel = vscode.window.createOutputChannel('Rubber Duck Review', {
@@ -33,7 +33,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   updateStatusBar();
 
-  // ── Suggestion hint decoration ──
+  // Suggestion hint decoration
 
   suggestionHintDecoration = vscode.window.createTextEditorDecorationType({
     after: {
@@ -55,7 +55,7 @@ export function activate(context: vscode.ExtensionContext): void {
     updateSuggestionHint(vscode.window.activeTextEditor);
   }
 
-  // ── Register commands ──
+  // Register commands
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -103,6 +103,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'rubberDuck.createSuggestion',
       handleCreateSuggestion
+    ),
+    vscode.commands.registerCommand(
+      'rubberDuck.createFileComment',
+      handleCreateFileComment
     )
   );
 
@@ -139,7 +143,7 @@ export function deactivate(): void {
   statusBarItem = undefined;
 }
 
-// ── Manager factory ──
+// Manager factory
 
 async function createManager(folder: vscode.WorkspaceFolder): Promise<void> {
   try {
@@ -164,7 +168,7 @@ async function createManager(folder: vscode.WorkspaceFolder): Promise<void> {
   }
 }
 
-// ── Status bar ──
+// Status bar
 
 function updateStatusBar(): void {
   if (!statusBarItem) return;
@@ -174,18 +178,18 @@ function updateStatusBar(): void {
   );
 
   if (activeMgrs.length === 0) {
-    statusBarItem.text = '🦆 Start Review';
+    statusBarItem.text = '$(comment-discussion) Start Review';
     statusBarItem.command = 'rubberDuck.startReview';
     statusBarItem.tooltip = 'No active reviews. Click to start one.';
   } else if (activeMgrs.length === 1) {
     const m = activeMgrs[0];
-    statusBarItem.text = `🦆 Reviewing ${m.folderName}`;
+    statusBarItem.text = `$(comment-discussion) Reviewing ${m.folderName}`;
     statusBarItem.command = 'rubberDuck.stopReview';
     statusBarItem.tooltip = new vscode.MarkdownString(
       `${m.folderName}: ${m.commentCount} comment(s) — Click to stop review`
     );
   } else {
-    statusBarItem.text = `🦆 ${activeMgrs.length} reviews`;
+    statusBarItem.text = `$(comment-discussion) ${activeMgrs.length} reviews`;
     statusBarItem.command = 'rubberDuck.stopReview';
     const tooltipLines = activeMgrs.map(
       (m) => `- ${m.folderName}: ${m.commentCount} comment(s)`
@@ -218,7 +222,7 @@ function updateSuggestionHint(editor: vscode.TextEditor): void {
   editor.setDecorations(suggestionHintDecoration, [{ range }]);
 }
 
-// ── Helpers ──
+// Helpers
 
 async function resolveManagerForCommand(): Promise<ReviewManager | undefined> {
   const mgrList = Array.from(managers.values());
@@ -257,7 +261,7 @@ async function resolveManagerForCommand(): Promise<ReviewManager | undefined> {
   return pick?.manager;
 }
 
-/** Find the manager that owns a given CommentThread. */
+// Find the manager that owns a given CommentThread.
 function getManagerByThread(
   thread: vscode.CommentThread
 ): ReviewManager | undefined {
@@ -266,7 +270,7 @@ function getManagerByThread(
   return managers.get(folder.uri.fsPath);
 }
 
-// ── Command handlers: user-facing ──
+// Command handlers: user-facing
 
 async function handleStartReview(): Promise<void> {
   const mgr = await resolveManagerForCommand();
@@ -336,23 +340,21 @@ async function handleExportMarkdown(): Promise<void> {
   }
 }
 
-// ── Command handlers: comment actions ──
+// Command handlers: comment actions
 
 async function handleCreateComment(
-  threadOrReply:
-    | vscode.CommentThread
-    | { thread: vscode.CommentThread; text: string },
-  maybeInput?: string
+  first: vscode.CommentThread | vscode.CommentReply,
+  second?: string
 ): Promise<void> {
   let thread: vscode.CommentThread;
   let input: string;
 
-  if ('text' in threadOrReply && 'thread' in threadOrReply) {
-    thread = threadOrReply.thread;
-    input = threadOrReply.text;
+  if (first && 'text' in first && 'thread' in first) {
+    thread = first.thread;
+    input = first.text;
   } else {
-    thread = threadOrReply as vscode.CommentThread;
-    input = maybeInput ?? '';
+    thread = first as vscode.CommentThread;
+    input = second ?? '';
   }
 
   const mgr = getManagerByThread(thread);
@@ -408,4 +410,10 @@ async function handleCreateSuggestion(): Promise<void> {
   const range = new vscode.Range(editor.selection.start, editor.selection.end);
 
   await mgr.createSuggestion(editor.document.uri, range, selectedText);
+}
+
+async function handleCreateFileComment(uri?: vscode.Uri): Promise<void> {
+  const mgr = await resolveManagerForCommand();
+  if (!mgr) return;
+  await mgr.createFileComment(uri);
 }

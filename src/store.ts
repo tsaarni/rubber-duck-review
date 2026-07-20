@@ -7,11 +7,20 @@ import * as vscode from 'vscode';
 import type { CommitInfo } from './git';
 import { logger } from './logger';
 
-// ── Types (mirrors reviews-schema.json) ──
+// Types (mirrors reviews-schema.json)
 
 export interface AuthorInfo {
   name: string;
   email?: string;
+}
+
+export interface ReviewSymbolInfo {
+  name: string;
+  kind: string;
+  containerName?: string;
+  detail?: string;
+  startLine?: number;
+  endLine?: number;
 }
 
 export interface ReviewComment {
@@ -19,9 +28,13 @@ export interface ReviewComment {
   path: string;
   startLine?: number; // Required for LINE, omitted for FILE
   endLine?: number; // Required for LINE, omitted for FILE
+  startColumn?: number;
+  endColumn?: number;
   subjectType: 'LINE' | 'FILE';
+  languageId?: string;
   body: string;
-  author?: AuthorInfo;
+  snippet?: string;
+  symbol?: ReviewSymbolInfo;
   createdAt: string;
 }
 
@@ -36,11 +49,10 @@ export interface Review {
 
 interface ReviewsFile {
   version: 1;
-  author?: AuthorInfo;
   reviews: Review[];
 }
 
-// ── Helpers ──
+// Helpers
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -50,24 +62,27 @@ function newUUID(): string {
   return crypto.randomUUID();
 }
 
-// ── Store ──
+// Store
 
 export class ReviewStore {
   private readonly filePath: string;
-  private data: ReviewsFile;
+  private readonly data: ReviewsFile;
+
+  get reviewsFilePath(): string {
+    return this.filePath;
+  }
 
   private constructor(filePath: string, data: ReviewsFile) {
     this.filePath = filePath;
     this.data = data;
   }
 
-  /** Load (or create) the reviews file at the given workspace root. */
+  // Load (or create) the reviews file at the given workspace root.
   static async load(
     workspaceRoot: vscode.Uri,
-    customPath?: string
+    customPath: string = '.vscode/reviews.json'
   ): Promise<ReviewStore> {
-    const relativePath = customPath ?? '.vscode/reviews.json';
-    const filePath = vscode.Uri.joinPath(workspaceRoot, relativePath).fsPath;
+    const filePath = vscode.Uri.joinPath(workspaceRoot, customPath).fsPath;
 
     let data: ReviewsFile;
     try {
@@ -110,7 +125,7 @@ export class ReviewStore {
     return new ReviewStore(filePath, data);
   }
 
-  // ── Query methods ──
+  // Query methods
 
   getReviews(): Review[] {
     return this.data.reviews;
@@ -124,13 +139,12 @@ export class ReviewStore {
     return this.data.reviews.find((r) => r.baseCommit?.id === baseCommit);
   }
 
-  // ── Mutation methods ──
+  // Mutation methods
 
   async createReview(
     baseCommit: CommitInfo | null,
     headCommit: CommitInfo | null,
-    hasUncommittedChanges: boolean,
-    author?: AuthorInfo
+    hasUncommittedChanges: boolean
   ): Promise<Review> {
     const review: Review = {
       id: newUUID(),
@@ -142,9 +156,6 @@ export class ReviewStore {
     };
 
     this.data.reviews.push(review);
-    if (author) {
-      this.data.author = author;
-    }
     await this.save();
     return review;
   }
@@ -169,7 +180,13 @@ export class ReviewStore {
     endLine: number,
     subjectType: 'LINE' | 'FILE',
     body: string,
-    author?: AuthorInfo
+    snippet?: string,
+    options?: {
+      startColumn?: number;
+      endColumn?: number;
+      languageId?: string;
+      symbol?: ReviewSymbolInfo;
+    }
   ): Promise<ReviewComment> {
     const review = this.getReview(reviewId);
     if (!review) {
@@ -193,9 +210,18 @@ export class ReviewStore {
       path: filePath,
       subjectType,
       body,
-      author,
       createdAt: nowISO(),
-      ...(subjectType === 'LINE' ? { startLine, endLine } : {}),
+      languageId: options?.languageId,
+      symbol: options?.symbol,
+      ...(subjectType === 'LINE'
+        ? {
+            startLine,
+            endLine,
+            startColumn: options?.startColumn,
+            endColumn: options?.endColumn,
+            snippet,
+          }
+        : {}),
     };
 
     review.comments.push(comment);
@@ -226,7 +252,7 @@ export class ReviewStore {
     }
   }
 
-  /** Generate a Markdown export of the review. */
+  // Generate a Markdown export of the review.
   async exportMarkdown(
     reviewId: string,
     workspaceRoot: vscode.Uri,
@@ -240,79 +266,64 @@ export class ReviewStore {
     const lines: string[] = [];
 
     const folderName = path.basename(workspaceRoot.fsPath);
-    lines.push(`# Code Review: ${folderName}`);
-    lines.push('');
+    lines.push(`# Code Review: ${folderName}`, '');
 
     const userName = author?.name ?? 'Unknown';
     const userEmail = author?.email;
-    const authorStr = `**Author:** ${userName}${userEmail ? ` <${userEmail}>` : ''}`;
-    if (authorStr) {
-      lines.push(authorStr);
-    }
-    lines.push(`**Date:** \`${review.createdAt}\``);
+    lines.push(
+      `**Author:** ${userName}${userEmail ? ` <${userEmail}>` : ''}`,
+      `**Date:** ${formatExportDate(review.createdAt)}`
+    );
 
     if (review.baseCommit) {
-      lines.push(
-        `**Base:** \`${review.baseCommit.id}\` "${review.baseCommit.message}"`
-      );
+      const shortSha = review.baseCommit.id.slice(0, 7);
+      lines.push(`**Base:** \`${shortSha}\` ("${review.baseCommit.message}")`);
     }
     if (review.headCommit) {
+      const shortSha = review.headCommit.id.slice(0, 7);
+      const uncommitted = review.hasUncommittedChanges
+        ? ' (with uncommitted changes)'
+        : '';
       lines.push(
-        `**Head:** \`${review.headCommit.id}\` "${review.headCommit.message}"${review.hasUncommittedChanges ? ' (with uncommitted changes)' : ''}`
+        `**Head:** \`${shortSha}\` ("${review.headCommit.message}"${uncommitted})`
       );
     }
     lines.push('');
 
+    lines.push(
+      '> **Note:** Line numbers may differ from the current file.',
+      ''
+    );
+
     for (const comment of review.comments) {
       lines.push('---', '');
-      const displayPath = comment.path.replace(/\\/g, '/');
+      lines.push(`## ${formatLocation(comment)}`);
 
-      if (comment.subjectType === 'FILE') {
-        lines.push(`## ${displayPath} (file-level comment)`);
-      } else {
-        lines.push(
-          `## ${displayPath} (lines ${comment.startLine}-${comment.endLine})`
-        );
-      }
       lines.push(
-        `<!-- comment id ${comment.id}, created at ${comment.createdAt} -->`
+        `<!-- comment id ${comment.id}, created at ${comment.createdAt} -->`,
+        ''
       );
-      lines.push('');
 
-      // Code snippet for LINE comments
-      if (
-        comment.subjectType === 'LINE' &&
-        comment.startLine != null &&
-        comment.endLine != null
-      ) {
-        const fileUri = vscode.Uri.joinPath(workspaceRoot, comment.path);
-        const snippet = await readSnippet(
-          fileUri,
-          comment.startLine,
-          comment.endLine
-        );
-        if (snippet === null) {
-          lines.push('*(source file not found)*');
-        } else {
-          lines.push(`\`\`\`${snippet.languageId}`);
-          lines.push(snippet.text);
-          lines.push('```');
-        }
-        lines.push('');
+      // Code snippet for LINE comments (stored at creation time; line numbers are hints only)
+      if (comment.subjectType === 'LINE' && comment.snippet) {
+        const lang = comment.languageId ?? '';
+        lines.push(`\`\`\`${lang}`, comment.snippet, '```', '');
       }
 
       // Comment body in blockquote
-      const commentAuthor = comment.author?.name || author?.name || 'Unknown';
-      lines.push(`${commentAuthor} wrote:`);
+      const commentAuthor = author?.name || 'Unknown';
       const escapedBody = escapeForBlockquote(comment.body);
-      lines.push(`> ${escapedBody.replace(/\n/g, '\n> ')}`);
-      lines.push('');
+      lines.push(
+        `${commentAuthor} wrote:`,
+        `> ${escapedBody.replaceAll('\n', '\n> ')}`,
+        ''
+      );
     }
 
     return lines.join('\n');
   }
 
-  // ── Internal ──
+  // Internal
 
   private findComment(
     reviewId: string,
@@ -322,9 +333,36 @@ export class ReviewStore {
     return review?.comments.find((c) => c.id === commentId);
   }
 
-  /** Atomic save: write to a temp file then rename. Prevents corruption from partial writes. */
+  // Delete the reviews file from disk (used when no reviews remain).
+  private async deleteFile(): Promise<void> {
+    try {
+      logger.debug(`Deleting reviews file ${this.filePath} (no reviews left)`);
+      fs.unlinkSync(this.filePath);
+    } catch (err) {
+      if (
+        err &&
+        typeof err === 'object' &&
+        'code' in err &&
+        (err as { code?: unknown }).code !== 'ENOENT'
+      ) {
+        logger.error(`Failed to delete reviews file ${this.filePath}: ${err}`);
+        throw err;
+      }
+      // File did not exist — nothing to do (already "deleted")
+    }
+  }
+
+  // Atomic save: write to a temp file then rename. Prevents corruption from partial writes.
+  // If there are no reviews left, the file is deleted from disk instead.
   private async save(): Promise<void> {
-    const raw = new TextEncoder().encode(JSON.stringify(this.data, null, 2));
+    if (this.data.reviews.length === 0) {
+      await this.deleteFile();
+      return;
+    }
+
+    const raw = new TextEncoder().encode(
+      `${JSON.stringify(this.data, null, 2)}\n`
+    );
 
     // Ensure parent directory exists
     const dir = path.dirname(this.filePath);
@@ -337,6 +375,7 @@ export class ReviewStore {
     // Write to temp file, then atomically rename
     const tmpPath = `${this.filePath}.${crypto.randomUUID()}.tmp`;
     try {
+      logger.debug(`Saving reviews file to ${this.filePath}`);
       fs.writeFileSync(tmpPath, raw);
       fs.renameSync(tmpPath, this.filePath);
     } catch (err) {
@@ -352,34 +391,60 @@ export class ReviewStore {
   }
 }
 
-// ── Snippet reader ──
-
-async function readSnippet(
-  fileUri: vscode.Uri,
-  startLine: number,
-  endLine: number
-): Promise<{ text: string; languageId: string } | null> {
-  let doc: vscode.TextDocument;
-  try {
-    doc = await vscode.workspace.openTextDocument(fileUri);
-  } catch {
-    return null;
-  }
-
-  const snippetLines: string[] = [];
-  for (let i = startLine; i <= endLine; i++) {
-    const lineText = doc.lineAt(i - 1).text; // lineAt is 0-based
-    snippetLines.push(lineText);
-  }
-  return { text: snippetLines.join('\n'), languageId: doc.languageId };
+// Format ISO date string for markdown export header.
+function formatExportDate(isoDate: string): string {
+  return isoDate
+    .replace('T', ' ')
+    .replace(/\.\d+Z$/, ' UTC')
+    .replace(/Z$/, ' UTC');
 }
 
-// ── Markdown escaping ──
+// Format location (filename, line/range, symbol) in standard grep/git format.
+function formatLocation(comment: ReviewComment): string {
+  const displayPath = comment.path.replace(/\\/g, '/');
 
-/** Escape content for embedding in a markdown blockquote. */
+  let location = displayPath;
+  if (comment.subjectType === 'LINE' && comment.startLine !== undefined) {
+    const lineStr =
+      comment.endLine === undefined || comment.startLine === comment.endLine
+        ? `${comment.startLine}`
+        : `${comment.startLine}-${comment.endLine}`;
+    location = `${displayPath}:${lineStr}`;
+  }
+
+  if (comment.symbol) {
+    location = `${location} @@ ${formatSymbol(comment.symbol)}`;
+  }
+
+  return location;
+}
+
+// Format a symbol e.g. Container.methodName.
+function formatSymbol(symbol: ReviewSymbolInfo): string {
+  const symbolPath = symbol.containerName
+    ? `${symbol.containerName}.${symbol.name}`
+    : symbol.name;
+
+  if (symbol.detail) {
+    if (symbol.detail.startsWith('(')) {
+      return `${symbolPath}${symbol.detail}`;
+    }
+    if (symbol.detail.includes(symbol.name)) {
+      return symbol.containerName
+        ? `${symbol.containerName}.${symbol.detail}`
+        : symbol.detail;
+    }
+    return `${symbolPath} ${symbol.detail}`;
+  }
+
+  return symbolPath;
+}
+
+// Escape content for embedding in a markdown blockquote.
 function escapeForBlockquote(body: string): string {
+  const backslash = String.raw`\\`[0];
   return body
-    .replace(/^```/gm, '\\`\\`\\`')
-    .replace(/^#/gm, '\\#')
-    .replace(/^>/gm, '\\>');
+    .replace(/^```/gm, `${backslash}\`${backslash}\`${backslash}\``)
+    .replace(/^#/gm, `${backslash}#`)
+    .replace(/^>/gm, `${backslash}>`);
 }

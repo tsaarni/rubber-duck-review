@@ -4,16 +4,108 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ReviewCommentImpl } from './comment-model';
 import { logger } from './logger';
-import type { AuthorInfo, ReviewComment, ReviewStore } from './store';
+import type {
+  AuthorInfo,
+  ReviewComment,
+  ReviewStore,
+  ReviewSymbolInfo,
+} from './store';
+
+interface SymbolWithContainer {
+  symbol: vscode.DocumentSymbol;
+  containerName?: string;
+}
+
+function symbolKindToString(kind: vscode.SymbolKind): string {
+  switch (kind) {
+    case vscode.SymbolKind.File:
+      return 'file';
+    case vscode.SymbolKind.Module:
+      return 'module';
+    case vscode.SymbolKind.Namespace:
+      return 'namespace';
+    case vscode.SymbolKind.Package:
+      return 'package';
+    case vscode.SymbolKind.Class:
+      return 'class';
+    case vscode.SymbolKind.Method:
+      return 'method';
+    case vscode.SymbolKind.Property:
+      return 'property';
+    case vscode.SymbolKind.Field:
+      return 'field';
+    case vscode.SymbolKind.Constructor:
+      return 'constructor';
+    case vscode.SymbolKind.Enum:
+      return 'enum';
+    case vscode.SymbolKind.Interface:
+      return 'interface';
+    case vscode.SymbolKind.Function:
+      return 'function';
+    case vscode.SymbolKind.Variable:
+      return 'variable';
+    case vscode.SymbolKind.Constant:
+      return 'constant';
+    case vscode.SymbolKind.String:
+      return 'string';
+    case vscode.SymbolKind.Number:
+      return 'number';
+    case vscode.SymbolKind.Boolean:
+      return 'boolean';
+    case vscode.SymbolKind.Array:
+      return 'array';
+    case vscode.SymbolKind.Object:
+      return 'object';
+    case vscode.SymbolKind.Key:
+      return 'key';
+    case vscode.SymbolKind.Null:
+      return 'null';
+    case vscode.SymbolKind.EnumMember:
+      return 'enumMember';
+    case vscode.SymbolKind.Struct:
+      return 'struct';
+    case vscode.SymbolKind.Event:
+      return 'event';
+    case vscode.SymbolKind.Operator:
+      return 'operator';
+    case vscode.SymbolKind.TypeParameter:
+      return 'typeParameter';
+    default:
+      return 'symbol';
+  }
+}
+
+function findDeepestSymbol(
+  symbols: vscode.DocumentSymbol[],
+  range: vscode.Range,
+  parentContainer?: string
+): SymbolWithContainer | undefined {
+  for (const sym of symbols) {
+    if (sym.range.contains(range)) {
+      const childContainer = parentContainer
+        ? `${parentContainer}.${sym.name}`
+        : sym.name;
+      const childMatch = findDeepestSymbol(sym.children, range, childContainer);
+      if (childMatch) {
+        return childMatch;
+      }
+      return {
+        symbol: sym,
+        containerName: parentContainer,
+      };
+    }
+  }
+  return undefined;
+}
 
 export class ReviewCommentController implements vscode.Disposable {
   private readonly controller: vscode.CommentController;
   private readonly store: ReviewStore;
   private readonly reviewId: string;
   private readonly workspaceRoot: vscode.Uri;
-  private author: AuthorInfo;
+  private readonly author: AuthorInfo;
 
-  // Maps store comment ID → ReviewCommentImpl
+  // Maps store comment ID -> ReviewCommentImpl
   private readonly comments = new Map<string, ReviewCommentImpl>();
 
   constructor(
@@ -57,11 +149,11 @@ export class ReviewCommentController implements vscode.Disposable {
     }
   }
 
-  // ── CommentingRangeProvider ──
+  // CommentingRangeProvider
 
   private provideCommentingRanges(document: vscode.TextDocument) {
     const folder = vscode.workspace.getWorkspaceFolder(document.uri);
-    if (!folder || folder.uri.toString() !== this.workspaceRoot.toString()) {
+    if (folder?.uri.toString() !== this.workspaceRoot.toString()) {
       return;
     }
 
@@ -83,13 +175,64 @@ export class ReviewCommentController implements vscode.Disposable {
     return;
   }
 
-  // ── Suggestion block ──
+  // Suggestion block
 
   private buildSuggestionBlock(selectedText: string): string {
     return `\`\`\`suggestion\n${selectedText.trimEnd()}\n\`\`\``;
   }
 
-  // ── Comment CRUD ──
+  // Capture the lines for a LINE comment range.
+  private captureSnippet(
+    doc: vscode.TextDocument,
+    startLine: number,
+    endLine: number
+  ): string {
+    const snippetLines: string[] = [];
+    for (let i = startLine; i <= endLine; i++) {
+      snippetLines.push(doc.lineAt(i - 1).text);
+    }
+    return snippetLines.join('\n');
+  }
+
+  // Retrieve enclosing symbol (function, method, class) from VS Code language provider.
+  private async getEnclosingSymbol(
+    uri: vscode.Uri,
+    range?: vscode.Range
+  ): Promise<ReviewSymbolInfo | undefined> {
+    if (!range) return undefined;
+    try {
+      let targetUri = uri;
+      if (targetUri.scheme === 'git') {
+        const relPath = this.getRelativePath(targetUri);
+        if (relPath) {
+          targetUri = vscode.Uri.joinPath(this.workspaceRoot, relPath);
+        }
+      }
+
+      const symbols = await vscode.commands.executeCommand<
+        vscode.DocumentSymbol[]
+      >('vscode.executeDocumentSymbolProvider', targetUri);
+
+      if (!symbols || symbols.length === 0) return undefined;
+
+      const match = findDeepestSymbol(symbols, range);
+      if (!match) return undefined;
+
+      return {
+        name: match.symbol.name,
+        kind: symbolKindToString(match.symbol.kind),
+        containerName: match.containerName,
+        detail: match.symbol.detail || undefined,
+        startLine: match.symbol.range.start.line + 1,
+        endLine: match.symbol.range.end.line + 1,
+      };
+    } catch (err) {
+      logger.debug(`Failed to fetch document symbols: ${err}`);
+      return undefined;
+    }
+  }
+
+  // Comment CRUD
 
   async createComment(
     thread: vscode.CommentThread,
@@ -102,8 +245,19 @@ export class ReviewCommentController implements vscode.Disposable {
     const subjectType: 'LINE' | 'FILE' = range ? 'LINE' : 'FILE';
     const startLine = range ? range.start.line + 1 : 1;
     const endLine = range ? range.end.line + 1 : 1;
+    const startColumn = range ? range.start.character + 1 : undefined;
+    const endColumn = range ? range.end.character + 1 : undefined;
 
     try {
+      const doc = await vscode.workspace.openTextDocument(thread.uri);
+      const languageId = doc.languageId;
+      const symbol = await this.getEnclosingSymbol(thread.uri, range);
+
+      let snippet: string | undefined;
+      if (subjectType === 'LINE' && range) {
+        snippet = this.captureSnippet(doc, startLine, endLine);
+      }
+
       const storeComment = await this.store.addComment(
         this.reviewId,
         relativePath,
@@ -111,18 +265,23 @@ export class ReviewCommentController implements vscode.Disposable {
         endLine,
         subjectType,
         input,
-        this.author
+        snippet,
+        {
+          startColumn,
+          endColumn,
+          languageId,
+          symbol,
+        }
       );
 
       const comment = new ReviewCommentImpl(
         storeComment,
-        this.getAuthorInfo(storeComment),
+        this.getAuthorInfo(),
         thread
       );
       thread.comments = [comment];
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
       thread.canReply = false;
-      thread.label = this.buildThreadLabel(relativePath, range);
 
       this.comments.set(storeComment.id, comment);
     } catch (err) {
@@ -133,7 +292,7 @@ export class ReviewCommentController implements vscode.Disposable {
     }
   }
 
-  /** Create a comment pre-filled with a suggestion block, opened in editing mode. */
+  // Create a comment pre-filled with a suggestion block, opened in editing mode.
   async createSuggestion(
     uri: vscode.Uri,
     range: vscode.Range,
@@ -145,10 +304,21 @@ export class ReviewCommentController implements vscode.Disposable {
     const subjectType: 'LINE' | 'FILE' = range ? 'LINE' : 'FILE';
     const startLine = range ? range.start.line + 1 : 1;
     const endLine = range ? range.end.line + 1 : 1;
+    const startColumn = range ? range.start.character + 1 : undefined;
+    const endColumn = range ? range.end.character + 1 : undefined;
 
     const suggestionBody = this.buildSuggestionBlock(selectedText);
 
     try {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      const languageId = doc.languageId;
+      const symbol = await this.getEnclosingSymbol(uri, range);
+
+      let snippet: string | undefined;
+      if (subjectType === 'LINE') {
+        snippet = this.captureSnippet(doc, startLine, endLine);
+      }
+
       const storeComment = await this.store.addComment(
         this.reviewId,
         relativePath,
@@ -156,13 +326,19 @@ export class ReviewCommentController implements vscode.Disposable {
         endLine,
         subjectType,
         suggestionBody,
-        this.author
+        snippet,
+        {
+          startColumn,
+          endColumn,
+          languageId,
+          symbol,
+        }
       );
 
       const thread = this.controller.createCommentThread(uri, range, []);
       const comment = new ReviewCommentImpl(
         storeComment,
-        this.getAuthorInfo(storeComment),
+        this.getAuthorInfo(),
         thread
       );
 
@@ -172,7 +348,6 @@ export class ReviewCommentController implements vscode.Disposable {
       thread.comments = [comment];
       thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
       thread.canReply = false;
-      thread.label = this.buildThreadLabel(relativePath, range);
 
       this.comments.set(storeComment.id, comment);
     } catch (err) {
@@ -228,22 +403,40 @@ export class ReviewCommentController implements vscode.Disposable {
     }
   }
 
-  // ── Helpers ──
+  async createFileComment(uri: vscode.Uri): Promise<void> {
+    const relativePath = this.getRelativePath(uri);
+    if (!relativePath) return;
 
-  /** Get author info, preferring stored comment author, falling back to current user. */
-  private getAuthorInfo(
-    storeComment: ReviewComment
-  ): vscode.CommentAuthorInformation {
-    if (storeComment.author?.name) {
-      return { name: storeComment.author.name };
+    // Expand existing file comment thread if present
+    for (const comment of this.comments.values()) {
+      if (
+        comment.subjectType === 'FILE' &&
+        comment.parent.uri.fsPath === uri.fsPath
+      ) {
+        comment.parent.collapsibleState =
+          vscode.CommentThreadCollapsibleState.Expanded;
+        return;
+      }
     }
+
+    const thread = this.controller.createCommentThread(
+      uri,
+      undefined as unknown as vscode.Range,
+      []
+    );
+    thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+  }
+
+  // Helpers
+
+  private getAuthorInfo(): vscode.CommentAuthorInformation {
     return { name: this.author.name };
   }
 
   private createThreadForComment(storeComment: ReviewComment): void {
     const fileUri = vscode.Uri.joinPath(this.workspaceRoot, storeComment.path);
 
-    let range: vscode.Range;
+    let range: vscode.Range | undefined;
     if (
       storeComment.subjectType === 'LINE' &&
       storeComment.startLine != null &&
@@ -255,50 +448,34 @@ export class ReviewCommentController implements vscode.Disposable {
         storeComment.endLine - 1,
         0
       );
-    } else {
-      range = new vscode.Range(0, 0, 0, 0);
     }
 
-    const thread = this.controller.createCommentThread(fileUri, range, []);
+    const thread = this.controller.createCommentThread(
+      fileUri,
+      range as unknown as vscode.Range,
+      []
+    );
     const comment = new ReviewCommentImpl(
       storeComment,
-      this.getAuthorInfo(storeComment),
+      this.getAuthorInfo(),
       thread
     );
 
     thread.comments = [comment];
     thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
     thread.canReply = false;
-    thread.label = this.buildThreadLabel(storeComment.path, range);
 
     this.comments.set(storeComment.id, comment);
   }
 
   private getRelativePath(uri: vscode.Uri): string | undefined {
     const folder = vscode.workspace.getWorkspaceFolder(uri);
-    if (!folder || folder.uri.toString() !== this.workspaceRoot.toString()) {
+    if (folder?.uri.toString() !== this.workspaceRoot.toString()) {
       return undefined;
     }
     const rel = path.relative(this.workspaceRoot.fsPath, uri.fsPath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
     return rel.replace(/\\/g, '/');
-  }
-
-  private buildThreadLabel(
-    filePath: string,
-    range: vscode.Range | undefined
-  ): string {
-    const fileName = path.basename(filePath);
-    if (!range) return fileName;
-    return `${fileName}:${range.start.line + 1}-${range.end.line + 1}`;
-  }
-
-  /** Find our ReviewCommentImpl from a VS Code Comment object. */
-  findComment(vscodeComment: vscode.Comment): ReviewCommentImpl | undefined {
-    if (vscodeComment instanceof ReviewCommentImpl) {
-      return vscodeComment;
-    }
-    return undefined;
   }
 
   dispose(): void {

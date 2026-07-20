@@ -23,7 +23,7 @@ function git(
   return new Promise((resolve, reject) => {
     execFile('git', args, { cwd }, (error, stdout, stderr) => {
       if (error) {
-        reject(error);
+        reject(new Error(stderr.trim() || error.message, { cause: error }));
       } else {
         resolve({ stdout, stderr });
       }

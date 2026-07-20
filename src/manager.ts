@@ -1,6 +1,7 @@
 // Per-workspace-folder review lifecycle: start, stop, switch, export, and comment delegation.
 
 import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { ReviewCommentImpl } from './comment-model';
 import { ReviewCommentController } from './controller';
@@ -47,9 +48,9 @@ export class ReviewManager implements vscode.Disposable {
     return review?.comments.length ?? 0;
   }
 
-  // ── Review lifecycle ──
+  // Review lifecycle
 
-  /** Start or resume a review. Auto-resumes a review matching the current base commit, or shows a quick pick. */
+  // Start or resume a review. Auto-resumes a review matching the current base commit, or shows a quick pick.
   async startReview(): Promise<void> {
     const commitCtx = await this.determineCommitContext();
 
@@ -99,13 +100,13 @@ export class ReviewManager implements vscode.Disposable {
     }
   }
 
-  /** Create a new review. */
+  // Create a new review.
   async newReview(): Promise<void> {
     const commitCtx = await this.determineCommitContext();
     await this.createNewReview(commitCtx);
   }
 
-  /** Show a quick pick of all reviews and switch to the selected one. */
+  // Show a quick pick of all reviews and switch to the selected one.
   async switchReview(): Promise<void> {
     const reviews = this.store.getReviews();
 
@@ -135,22 +136,31 @@ export class ReviewManager implements vscode.Disposable {
     await this.activateReview(pick.id);
   }
 
-  /** Stop the active review. Comments are preserved. */
+  // Stop the active review. Comments are preserved.
   stopReview(): void {
     if (!this.activeReviewId) return;
     this.cleanupReview();
     vscode.window.showInformationMessage('Review stopped.');
   }
 
-  /** Delete the active review after confirmation. */
+  // Relative path to reviews file e.g. projectdir/.vscode/reviews.json
+  getRelativeReviewsPath(): string {
+    const parentDir = path.dirname(this.workspaceRoot.fsPath);
+    return path
+      .relative(parentDir, this.store.reviewsFilePath)
+      .replace(/\\/g, '/');
+  }
+
+  // Delete the active review after confirmation.
   async clearReview(): Promise<void> {
     if (!this.activeReviewId) {
       vscode.window.showInformationMessage('No active review to clear.');
       return;
     }
 
+    const targetPath = this.getRelativeReviewsPath();
     const confirm = await vscode.window.showWarningMessage(
-      `Delete the active review for "${this.folderName}"?`,
+      `Delete the active review in ${targetPath}?`,
       { modal: true },
       'Delete'
     );
@@ -163,10 +173,11 @@ export class ReviewManager implements vscode.Disposable {
     vscode.window.showInformationMessage('Review deleted.');
   }
 
-  /** Delete all reviews for this folder after confirmation. */
+  // Delete all reviews for this folder after confirmation.
   async deleteAllReviews(): Promise<void> {
+    const targetPath = this.getRelativeReviewsPath();
     const confirm = await vscode.window.showWarningMessage(
-      `Delete ALL reviews for "${this.folderName}"?`,
+      `Delete ALL reviews in ${targetPath}?`,
       { modal: true },
       'Delete All'
     );
@@ -178,13 +189,34 @@ export class ReviewManager implements vscode.Disposable {
     vscode.window.showInformationMessage('All reviews deleted.');
   }
 
-  // ── Comment delegation ──
+  // Comment delegation
 
   async createComment(
     thread: vscode.CommentThread,
     input: string
   ): Promise<void> {
     await this.controller?.createComment(thread, input);
+  }
+
+  async createFileComment(uri?: vscode.Uri): Promise<void> {
+    const targetUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+    if (!targetUri) {
+      vscode.window.showErrorMessage('No active file to comment on.');
+      return;
+    }
+
+    if (!this.isReviewActive) {
+      const start = await vscode.window.showInformationMessage(
+        'No active review. Start a review to add a comment?',
+        'Start Review'
+      );
+      if (start === 'Start Review') {
+        await this.startReview();
+      }
+      if (!this.isReviewActive) return;
+    }
+
+    await this.controller?.createFileComment(targetUri);
   }
 
   async createSuggestion(
@@ -211,7 +243,7 @@ export class ReviewManager implements vscode.Disposable {
     this.controller?.cancelEditComment(comment);
   }
 
-  /** Export the active review as Markdown. */
+  // Export the active review as Markdown.
   async exportMarkdown(): Promise<void> {
     if (!this.activeReviewId) {
       vscode.window.showInformationMessage('No active review to export.');
@@ -256,9 +288,9 @@ export class ReviewManager implements vscode.Disposable {
     }
   }
 
-  // ── Internal ──
+  // Internal
 
-  /** Resolve author from git config. Falls back to OS username, then environment variables. Cached after first call. */
+  // Resolve author from git config. Falls back to OS username, then environment variables. Cached after first call.
   private async resolveAuthor(): Promise<AuthorInfo> {
     if (this._author) return this._author;
 
@@ -345,14 +377,11 @@ export class ReviewManager implements vscode.Disposable {
     headCommit: CommitInfo | null;
     isDirty: boolean;
   }): Promise<void> {
-    const author = await this.resolveAuthor();
-
     try {
       const review = await this.store.createReview(
         commitCtx.baseCommit,
         commitCtx.headCommit,
-        commitCtx.isDirty,
-        author
+        commitCtx.isDirty
       );
       await this.activateReview(review.id);
       vscode.window.showInformationMessage('New review started.');

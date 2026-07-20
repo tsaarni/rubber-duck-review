@@ -5,6 +5,7 @@ import type { ReviewComment as StoreComment } from './store';
 
 export class ReviewCommentImpl implements vscode.Comment {
   public readonly commentId: string;
+  public readonly subjectType: 'LINE' | 'FILE';
   public readonly author: vscode.CommentAuthorInformation;
   public label: string | undefined;
   public mode: vscode.CommentMode;
@@ -23,6 +24,7 @@ export class ReviewCommentImpl implements vscode.Comment {
     thread: vscode.CommentThread
   ) {
     this.commentId = storeComment.id;
+    this.subjectType = storeComment.subjectType;
     this.author = author;
     this.parent = thread;
     this.mode = vscode.CommentMode.Preview;
@@ -57,7 +59,7 @@ export class ReviewCommentImpl implements vscode.Comment {
     this.refresh();
   }
 
-  /** Get the raw text content for saving to store. */
+  // Get the raw text content for saving to store.
   get rawBody(): string {
     if (typeof this.body === 'string') {
       return this.body;

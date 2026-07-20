@@ -102,9 +102,61 @@
           "type": "string",
           "enum": ["LINE", "FILE"]
         },
+        "startColumn": {
+          "description": "1-based start column (character offset + 1) of the commented range.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "endColumn": {
+          "description": "1-based end column (character offset + 1) of the commented range.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "languageId": {
+          "description": "VS Code language identifier of the document at creation time (e.g. 'typescript', 'python').",
+          "type": "string"
+        },
         "body": {
           "description": "Markdown body of the comment. May contain ```suggestion code fences.",
           "type": "string"
+        },
+        "snippet": {
+          "description": "The text snippet captured at the moment the comment was created.",
+          "type": "string"
+        },
+        "symbol": {
+          "description": "Enclosing code symbol (function, method, class) captured from VS Code at creation time.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "description": "Name of the symbol (e.g. 'createComment').",
+              "type": "string"
+            },
+            "kind": {
+              "description": "Kind of symbol (e.g. 'function', 'method', 'class', 'interface').",
+              "type": "string"
+            },
+            "containerName": {
+              "description": "Enclosing container or parent symbol name (e.g. 'ReviewCommentController').",
+              "type": "string"
+            },
+            "detail": {
+              "description": "Detail string or signature provided by VS Code.",
+              "type": "string"
+            },
+            "startLine": {
+              "description": "1-based start line of the enclosing symbol.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "endLine": {
+              "description": "1-based end line of the enclosing symbol.",
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": ["name", "kind"]
         },
         "createdAt": {
           "description": "ISO 8601 timestamp of comment creation.",

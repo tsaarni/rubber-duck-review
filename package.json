@@ -75,12 +75,36 @@
       },
       {
         "command": "rubberDuck.createSuggestion",
-        "title": "Rubber Duck: Make Suggestion",
+        "title": "Rubber Duck: Add Suggestion",
         "icon": "$(lightbulb)",
         "enablement": "editorHasSelection"
+      },
+      {
+        "command": "rubberDuck.createFileComment",
+        "title": "Rubber Duck: Add File Comment",
+        "icon": "$(comment)"
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "rubberDuck.createFileComment",
+          "group": "navigation@1",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "rubberDuck.createSuggestion",
+          "group": "navigation@2",
+          "when": "editorHasSelection"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "rubberDuck.createFileComment",
+          "group": "7_modification@1",
+          "when": "explorerResourceIsFolder == false"
+        }
+      ],
       "comments/comment/title": [
         {
           "command": "rubberDuck.editComment",
@@ -119,11 +143,6 @@
           "type": "string",
           "default": ".vscode/reviews.json",
           "description": "Path to the reviews file, relative to workspace root."
-        },
-        "rubberDuck.exportContextLines": {
-          "type": "number",
-          "default": 3,
-          "description": "Context lines around code snippets in markdown export."
         }
       }
     }
@@ -131,8 +150,10 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "biome check .",
-    "format": "biome check --write ."
+    "check": "biome check .",
+    "format": "biome check --write .",
+    "package": "npx @vscode/vsce package --no-dependencies -o rubber-duck-review.vsix",
+    "install-extension": "pnpm run compile && pnpm run package && code --install-extension rubber-duck-review.vsix --force"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
