@@ -13,11 +13,7 @@ The project provides the following scripts via `pnpm`:
 
 ## Development
 
-To set up the project:
-
 ```bash
-git clone https://github.com/tsaarni/rubber-duck-review.git
-cd rubber-duck-review
 pnpm install
 pnpm run install-extension
 ```

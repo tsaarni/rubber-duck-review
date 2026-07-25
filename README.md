@@ -11,10 +11,10 @@ Run **Rubber Duck: Start Review** from the Command Palette, or click the <img sr
 
 Once active:
 - Click `+` icons in the editor gutter to add line comments. Drag across lines to comment on a range.
-- Right-click a file in the Explorer → **Rubber Duck: Add File Comment** for file-level comments.
+- Right-click a file in the Explorer / **Rubber Duck: Add File Comment** for file-level comments.
 - Run **Rubber Duck: Add Suggestion** to insert a pre-filled comment with a code `suggestion` markdown block for the selected text.
 - Comments can also be added in the git diff view (SCM panel) on the modified side.
-- The <img src="media/duck.svg" height="14" align="absmiddle" alt="duck"> icon shows the live comment count; click it to stop the review.
+- The <img src="media/duck.svg" height="14" align="absmiddle" alt="duck"> icon shows the live comment count. Click it to stop the review.
 
 Export comments with **Rubber Duck: Export Review as Markdown**. Here is an example of the exported Markdown:
 
@@ -44,7 +44,7 @@ Reviewer wrote:
 
 | Command | Description |
 |---|---|
-| Rubber Duck: Start Review | Start or resume a review; auto-resumes if one matches the current commit |
+| Rubber Duck: Start Review | Start or resume a review, auto-resumes if one matches the current commit |
 | Rubber Duck: New Review | Always create a fresh review |
 | Rubber Duck: Switch Review | Load a previously saved review |
 | Rubber Duck: Stop Review | Hide annotations (comments preserved on disk) |
@@ -60,10 +60,11 @@ Reviewer wrote:
 
 ## Installation
 
-You can install the latest release directly via the command line using the release asset URL:
+This extension is mainly for personal use. If you want to use it, you can install it from the latest GitHub release.
 
 ```bash
-code --install-extension https://github.com/tsaarni/rubber-duck-review/releases/latest/download/rubber-duck-review.vsix
+curl -fsSL -o rubber-duck-review.vsix https://github.com/tsaarni/rubber-duck-review/releases/latest/download/rubber-duck-review.vsix
+code --install-extension rubber-duck-review.vsix
 ```
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for instructions on building and installing the extension locally from source.
+Or see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for instructions on building and installing the extension locally from source.
