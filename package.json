@@ -144,6 +144,7 @@
   },
   "scripts": {
     "build:font": "tsx scripts/build-font.ts",
+    "vscode:prepublish": "pnpm run compile",
     "compile": "pnpm run build:font && tsc -p ./",
     "watch": "tsc -watch -p ./",
     "check": "biome check .",
