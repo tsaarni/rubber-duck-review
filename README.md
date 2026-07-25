@@ -7,12 +7,14 @@ The extension supports line and file-level comments and Markdown export that can
 
 ## Usage
 
-Run **Rubber Duck: Start Review** from the Command Palette, or click "Start Review" in the status bar.
+Run **Rubber Duck: Start Review** from the Command Palette, or click the <img src="media/duck.svg" height="14" align="absmiddle" alt="duck"> icon in the status bar.
 
 Once active:
 - Click `+` icons in the editor gutter to add line comments. Drag across lines to comment on a range.
+- Right-click a file in the Explorer → **Rubber Duck: Add File Comment** for file-level comments.
 - Run **Rubber Duck: Add Suggestion** to insert a pre-filled comment with a code `suggestion` markdown block for the selected text.
 - Comments can also be added in the git diff view (SCM panel) on the modified side.
+- The <img src="media/duck.svg" height="14" align="absmiddle" alt="duck"> icon shows the live comment count; click it to stop the review.
 
 Export comments with **Rubber Duck: Export Review as Markdown**. Here is an example of the exported Markdown:
 
@@ -37,6 +39,18 @@ Export comments with **Rubber Duck: Export Review as Markdown**. Here is an exam
 Reviewer wrote:
 > This should have duck icon instead of comment-discussion (speech bubble).
 ````
+
+### Commands
+
+| Command | Description |
+|---|---|
+| Rubber Duck: Start Review | Start or resume a review; auto-resumes if one matches the current commit |
+| Rubber Duck: New Review | Always create a fresh review |
+| Rubber Duck: Switch Review | Load a previously saved review |
+| Rubber Duck: Stop Review | Hide annotations (comments preserved on disk) |
+| Rubber Duck: Clear Current Review | Delete the active review |
+| Rubber Duck: Delete All Reviews | Delete all reviews for this workspace folder |
+| Rubber Duck: Export Review as Markdown | Export to a `.md` file |
 
 ### Configuration
 
@@ -63,16 +77,3 @@ code --install-extension rubber-duck-review.vsix --force
 ```
 
 Or open the Extensions view in VS Code, click `...` at the top, and select **Install from VSIX...**.
-
-## Development
-
-Press `F5` in VS Code to launch a debug window with the extension loaded.
-
-| Command | Description |
-|---|---|
-| `pnpm run compile` | Compile TypeScript. |
-| `pnpm run watch` | Compile and watch for changes. |
-| `pnpm run package` | Package the extension into `rubber-duck-review.vsix`. |
-| `pnpm run install-extension` | Compile, package, and install the extension into VS Code. |
-| `pnpm run check` | Check for lint and format issues using Biome. |
-| `pnpm run format` | Auto-fix lint and format issues using Biome. |

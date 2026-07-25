@@ -6,4 +6,4 @@ node_modules/**
 biome.json
 tsconfig.json
 pnpm-lock.yaml
-DESIGN.md
+README.md
