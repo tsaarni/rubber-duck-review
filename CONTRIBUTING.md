@@ -1,6 +1,6 @@
-## Development
+# Contributing
 
-Press `F5` in VS Code to launch a debug window with the extension loaded.
+The project provides the following scripts via `pnpm`:
 
 | Command | Description |
 |---|---|
@@ -11,6 +11,21 @@ Press `F5` in VS Code to launch a debug window with the extension loaded.
 | `pnpm run check` | Check for lint and format issues using Biome. |
 | `pnpm run format` | Auto-fix lint and format issues using Biome. |
 
+## Development
+
+To set up the project:
+
+```bash
+git clone https://github.com/tsaarni/rubber-duck-review.git
+cd rubber-duck-review
+pnpm install
+pnpm run install-extension
+```
+
+Then re-launch VS Code to load the extension.
+
+Alternatively, open the project in VS Code and press `F5` to launch a debug window with the extension.
+
 ## Releasing
 
 To release a new version of the extension:
@@ -19,13 +34,12 @@ To release a new version of the extension:
    ```bash
    pnpm version <patch|minor|major|x.y.z>
    ```
-   *Bumps `"version"` in `package.json`, creates a git commit, and tags the release.*
+   This bumps `"version"` in `package.json`, creates a git commit, and tags the release.
 
 2. **Push Commit & Tag**:
    ```bash
    git push --follow-tags
    ```
-   *Pushes both the commit and the newly created tag to GitHub.*
+   This pushes both the commit and the newly created tag to GitHub.
 
-Pushing the tag triggers the GitHub Actions release workflow, which compiles, packages the `.vsix` artifact, and publishes a new GitHub Release with the attached `.vsix` file.
-
+Pushing the tag triggers a GitHub Actions release workflow that compiles the extension, packages it into a `.vsix` artifact, and publishes a new GitHub Release with the attached file.

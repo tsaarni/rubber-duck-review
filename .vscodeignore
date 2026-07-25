@@ -1,9 +1,15 @@
 .vscode/**
 .vscode-test/**
 src/**
+scripts/**
 node_modules/**
 .gitignore
 biome.json
 tsconfig.json
 pnpm-lock.yaml
+pnpm-workspace.yaml
 README.md
+.github
+media/duck.svg
+media/rubber-duck-review-logo.png
+reviews-schema.json

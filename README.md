@@ -60,20 +60,10 @@ Reviewer wrote:
 
 ## Installation
 
-Check out the repo and install into VS Code:
+You can install the latest release directly via the command line using the release asset URL:
 
 ```bash
-git clone https://github.com/tsaarni/rubber-duck-review.git
-cd rubber-duck-review
-pnpm install
-pnpm run install-extension
+code --install-extension https://github.com/tsaarni/rubber-duck-review/releases/latest/download/rubber-duck-review.vsix
 ```
 
-Or manually package and install:
-
-```bash
-pnpm run package
-code --install-extension rubber-duck-review.vsix --force
-```
-
-Or open the Extensions view in VS Code, click `...` at the top, and select **Install from VSIX...**.
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for instructions on building and installing the extension locally from source.
