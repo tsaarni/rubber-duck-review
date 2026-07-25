@@ -1,5 +1,5 @@
 
-![rubber-duck-review](rubber-duck-review.png)
+![rubber-duck-review](media/rubber-duck-review-logo.png)
 
 Rubber Duck Review is a VS Code extension for local code reviews. Write inline comments on your source files, stored as JSON in your workspace, see [`reviews-schema.json`](./reviews-schema.json).
 
@@ -11,7 +11,7 @@ Run **Rubber Duck: Start Review** from the Command Palette, or click "Start Revi
 
 Once active:
 - Click `+` icons in the editor gutter to add line comments. Drag across lines to comment on a range.
-- Click **Add Suggestion** in the editor title bar or run **Rubber Duck: Add Suggestion** to insert a pre-filled comment with a code `suggestion` markdown block for the selected text.
+- Run **Rubber Duck: Add Suggestion** to insert a pre-filled comment with a code `suggestion` markdown block for the selected text.
 - Comments can also be added in the git diff view (SCM panel) on the modified side.
 
 Export comments with **Rubber Duck: Export Review as Markdown**. Here is an example of the exported Markdown:
@@ -19,7 +19,6 @@ Export comments with **Rubber Duck: Export Review as Markdown**. Here is an exam
 ````markdown
 # Code Review: rubber-duck-review
 
-**Author:** Tero Saarni <tero.saarni@gmail.com>
 **Date:** 2026-07-20 14:16:56 UTC
 **Base:** `1c5d56d` ("update")
 **Head:** `1c5d56d` ("update" (with uncommitted changes))
@@ -35,7 +34,7 @@ Export comments with **Rubber Duck: Export Review as Markdown**. Here is an exam
     statusBarItem.text = '$(comment-discussion) Start Review';
 ```
 
-Tero Saarni wrote:
+Reviewer wrote:
 > This should have duck icon instead of comment-discussion (speech bubble).
 ````
 

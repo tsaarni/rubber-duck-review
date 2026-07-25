@@ -1,5 +1,15 @@
+# Build output & dependencies
 dist/
 node_modules/
-.vscode/extensions.json
 *.vsix
 
+# Generated font artifacts
+media/*.woff
+
+# Local testing & review output
+.vscode/reviews.json
+review-export.md
+
+# OS & Editor files
+.DS_Store
+.vscode/extensions.json

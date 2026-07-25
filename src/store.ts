@@ -9,11 +9,6 @@ import { logger } from './logger';
 
 // Types (mirrors reviews-schema.json)
 
-export interface AuthorInfo {
-  name: string;
-  email?: string;
-}
-
 export interface ReviewSymbolInfo {
   name: string;
   kind: string;
@@ -70,6 +65,10 @@ export class ReviewStore {
 
   get reviewsFilePath(): string {
     return this.filePath;
+  }
+
+  fileExists(): boolean {
+    return fs.existsSync(this.filePath);
   }
 
   private constructor(filePath: string, data: ReviewsFile) {
@@ -255,8 +254,7 @@ export class ReviewStore {
   // Generate a Markdown export of the review.
   async exportMarkdown(
     reviewId: string,
-    workspaceRoot: vscode.Uri,
-    author?: AuthorInfo
+    workspaceRoot: vscode.Uri
   ): Promise<string> {
     const review = this.getReview(reviewId);
     if (!review) {
@@ -268,12 +266,7 @@ export class ReviewStore {
     const folderName = path.basename(workspaceRoot.fsPath);
     lines.push(`# Code Review: ${folderName}`, '');
 
-    const userName = author?.name ?? 'Unknown';
-    const userEmail = author?.email;
-    lines.push(
-      `**Author:** ${userName}${userEmail ? ` <${userEmail}>` : ''}`,
-      `**Date:** ${formatExportDate(review.createdAt)}`
-    );
+    lines.push(`**Date:** ${formatExportDate(review.createdAt)}`);
 
     if (review.baseCommit) {
       const shortSha = review.baseCommit.id.slice(0, 7);
@@ -311,10 +304,9 @@ export class ReviewStore {
       }
 
       // Comment body in blockquote
-      const commentAuthor = author?.name || 'Unknown';
       const escapedBody = escapeForBlockquote(comment.body);
       lines.push(
-        `${commentAuthor} wrote:`,
+        'Reviewer wrote:',
         `> ${escapedBody.replaceAll('\n', '\n> ')}`,
         ''
       );

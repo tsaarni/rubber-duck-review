@@ -11,10 +11,6 @@
       "description": "Schema version for forward-compatibility.",
       "const": 1
     },
-    "author": {
-      "description": "Author who created the review.",
-      "$ref": "#/$defs/author"
-    },
     "reviews": {
       "type": "array",
       "items": { "$ref": "#/$defs/review" }
@@ -170,21 +166,6 @@
       },
       "then": {
         "required": ["startLine", "endLine"]
-      }
-    },
-    "author": {
-      "type": "object",
-      "required": ["name", "email"],
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "email": {
-          "type": "string",
-          "format": "email"
-        }
       }
     }
   }

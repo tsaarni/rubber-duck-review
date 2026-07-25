@@ -11,7 +11,6 @@ import { ReviewStore } from './store';
 
 const managers = new Map<string, ReviewManager>();
 let statusBarItem: vscode.StatusBarItem | undefined;
-let suggestionHintDecoration: vscode.TextEditorDecorationType | undefined;
 
 // Activation / Deactivation
 
@@ -32,28 +31,6 @@ export function activate(context: vscode.ExtensionContext): void {
     createManager(folder);
   }
   updateStatusBar();
-
-  // Suggestion hint decoration
-
-  suggestionHintDecoration = vscode.window.createTextEditorDecorationType({
-    after: {
-      contentText:
-        '  💡 Select code, then run "Rubber Duck: Add Suggestion" from Command Palette',
-      color: '#888888',
-      fontStyle: 'italic',
-    },
-    isWholeLine: false,
-  });
-  context.subscriptions.push(suggestionHintDecoration);
-
-  context.subscriptions.push(
-    vscode.window.onDidChangeTextEditorSelection((e) => {
-      updateSuggestionHint(e.textEditor);
-    })
-  );
-  if (vscode.window.activeTextEditor) {
-    updateSuggestionHint(vscode.window.activeTextEditor);
-  }
 
   // Register commands
 
@@ -178,48 +155,37 @@ function updateStatusBar(): void {
   );
 
   if (activeMgrs.length === 0) {
-    statusBarItem.text = '$(comment-discussion) Start Review';
+    statusBarItem.text = '$(rubber-duck)';
     statusBarItem.command = 'rubberDuck.startReview';
-    statusBarItem.tooltip = 'No active reviews. Click to start one.';
+    statusBarItem.tooltip = 'Rubber Duck Review: Click to start a review';
   } else if (activeMgrs.length === 1) {
     const m = activeMgrs[0];
-    statusBarItem.text = `$(comment-discussion) Reviewing ${m.folderName}`;
+    const count = m.commentCount;
+    statusBarItem.text = `$(rubber-duck) ${count}`;
     statusBarItem.command = 'rubberDuck.stopReview';
     statusBarItem.tooltip = new vscode.MarkdownString(
-      `${m.folderName}: ${m.commentCount} comment(s) — Click to stop review`
+      `**Rubber Duck Review**: Active (${count} comment${count === 1 ? '' : 's'})\n\nFolder: \`${m.folderName}\`\n\nClick to stop review.`
     );
   } else {
-    statusBarItem.text = `$(comment-discussion) ${activeMgrs.length} reviews`;
-    statusBarItem.command = 'rubberDuck.stopReview';
-    const tooltipLines = activeMgrs.map(
-      (m) => `- ${m.folderName}: ${m.commentCount} comment(s)`
+    const totalComments = activeMgrs.reduce(
+      (sum, m) => sum + m.commentCount,
+      0
     );
+    statusBarItem.text = `$(rubber-duck) ${activeMgrs.length} repos (${totalComments})`;
+    statusBarItem.command = 'rubberDuck.stopReview';
+    const tooltipLines = [
+      '**Rubber Duck Review**: Active multi-root review',
+      '',
+      ...activeMgrs.map(
+        (m) => `- **${m.folderName}**: ${m.commentCount} comment(s)`
+      ),
+      '',
+      'Click to stop review.',
+    ];
     statusBarItem.tooltip = new vscode.MarkdownString(tooltipLines.join('\n'));
   }
 
   statusBarItem.show();
-}
-
-function updateSuggestionHint(editor: vscode.TextEditor): void {
-  if (!suggestionHintDecoration) return;
-
-  const hasActiveReview = Array.from(managers.values()).some(
-    (m) => m.isReviewActive
-  );
-
-  if (!hasActiveReview || editor.selection.isEmpty) {
-    editor.setDecorations(suggestionHintDecoration, []);
-    return;
-  }
-
-  const line = editor.selection.active.line;
-  const range = new vscode.Range(
-    line,
-    Number.MAX_SAFE_INTEGER,
-    line,
-    Number.MAX_SAFE_INTEGER
-  );
-  editor.setDecorations(suggestionHintDecoration, [{ range }]);
 }
 
 // Helpers

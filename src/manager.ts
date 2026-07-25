@@ -1,13 +1,12 @@
 // Per-workspace-folder review lifecycle: start, stop, switch, export, and comment delegation.
 
-import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { ReviewCommentImpl } from './comment-model';
 import { ReviewCommentController } from './controller';
 import type { CommitInfo, GitContext } from './git';
 import { logger } from './logger';
-import type { AuthorInfo, ReviewStore } from './store';
+import type { ReviewStore } from './store';
 
 export class ReviewManager implements vscode.Disposable {
   private readonly store: ReviewStore;
@@ -15,7 +14,6 @@ export class ReviewManager implements vscode.Disposable {
   private readonly gitContext: GitContext | undefined;
   private controller: ReviewCommentController | undefined;
   private readonly onStateChange: () => void;
-  private _author: AuthorInfo | undefined;
 
   /** Public so extension.ts can read aggregate state. */
   public activeReviewId: string | undefined;
@@ -175,6 +173,11 @@ export class ReviewManager implements vscode.Disposable {
 
   // Delete all reviews for this folder after confirmation.
   async deleteAllReviews(): Promise<void> {
+    if (!this.store.fileExists()) {
+      vscode.window.showInformationMessage('No reviews to delete.');
+      return;
+    }
+
     const targetPath = this.getRelativeReviewsPath();
     const confirm = await vscode.window.showWarningMessage(
       `Delete ALL reviews in ${targetPath}?`,
@@ -250,14 +253,11 @@ export class ReviewManager implements vscode.Disposable {
       return;
     }
 
-    const author = await this.resolveAuthor();
-
     let markdown: string;
     try {
       markdown = await this.store.exportMarkdown(
         this.activeReviewId,
-        this.workspaceRoot,
-        author
+        this.workspaceRoot
       );
     } catch (err) {
       logger.error(`Export failed: ${err}`);
@@ -286,41 +286,6 @@ export class ReviewManager implements vscode.Disposable {
       logger.error(`Failed to write export file: ${err}`);
       vscode.window.showErrorMessage('Failed to save exported review.');
     }
-  }
-
-  // Internal
-
-  // Resolve author from git config. Falls back to OS username, then environment variables. Cached after first call.
-  private async resolveAuthor(): Promise<AuthorInfo> {
-    if (this._author) return this._author;
-
-    if (this.gitContext) {
-      try {
-        const gitAuthor = await this.gitContext.getAuthor();
-        if (gitAuthor.name) {
-          this._author = gitAuthor;
-          return this._author;
-        }
-      } catch {}
-    }
-
-    try {
-      const username = os.userInfo().username;
-      if (username) {
-        this._author = { name: username };
-        return this._author;
-      }
-    } catch {}
-
-    // Last resort: environment variables
-    this._author = {
-      name:
-        process.env.USER ??
-        process.env.LOGNAME ??
-        process.env.USERNAME ??
-        'Unknown',
-    };
-    return this._author;
   }
 
   private async determineCommitContext(): Promise<{
@@ -396,12 +361,10 @@ export class ReviewManager implements vscode.Disposable {
   private async activateReview(reviewId: string): Promise<void> {
     this.cleanupReview();
 
-    const author = await this.resolveAuthor();
     const controller = new ReviewCommentController(
       this.store,
       reviewId,
-      this.workspaceRoot,
-      author
+      this.workspaceRoot
     );
 
     await controller.initialize();

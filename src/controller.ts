@@ -4,12 +4,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ReviewCommentImpl } from './comment-model';
 import { logger } from './logger';
-import type {
-  AuthorInfo,
-  ReviewComment,
-  ReviewStore,
-  ReviewSymbolInfo,
-} from './store';
+import type { ReviewComment, ReviewStore, ReviewSymbolInfo } from './store';
 
 interface SymbolWithContainer {
   symbol: vscode.DocumentSymbol;
@@ -103,21 +98,14 @@ export class ReviewCommentController implements vscode.Disposable {
   private readonly store: ReviewStore;
   private readonly reviewId: string;
   private readonly workspaceRoot: vscode.Uri;
-  private readonly author: AuthorInfo;
 
   // Maps store comment ID -> ReviewCommentImpl
   private readonly comments = new Map<string, ReviewCommentImpl>();
 
-  constructor(
-    store: ReviewStore,
-    reviewId: string,
-    workspaceRoot: vscode.Uri,
-    author: AuthorInfo
-  ) {
+  constructor(store: ReviewStore, reviewId: string, workspaceRoot: vscode.Uri) {
     this.store = store;
     this.reviewId = reviewId;
     this.workspaceRoot = workspaceRoot;
-    this.author = author;
 
     const safePath = workspaceRoot.fsPath
       .replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -430,7 +418,7 @@ export class ReviewCommentController implements vscode.Disposable {
   // Helpers
 
   private getAuthorInfo(): vscode.CommentAuthorInformation {
-    return { name: this.author.name };
+    return { name: 'Reviewer' };
   }
 
   private createThreadForComment(storeComment: ReviewComment): void {
