@@ -2,7 +2,7 @@
   "name": "rubber-duck-review",
   "displayName": "Rubber Duck Review",
   "description": "Local code review comments stored as JSON in the workspace.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "tsaarni",
   "repository": {
     "type": "git",
