@@ -1,5 +1,6 @@
 // Manages VS Code comment threads for a single active review.
 
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ReviewCommentImpl } from './comment-model';
@@ -98,14 +99,21 @@ export class ReviewCommentController implements vscode.Disposable {
   private readonly store: ReviewStore;
   private readonly reviewId: string;
   private readonly workspaceRoot: vscode.Uri;
+  private readonly onStateChange?: () => void;
 
   // Maps store comment ID -> ReviewCommentImpl
   private readonly comments = new Map<string, ReviewCommentImpl>();
 
-  constructor(store: ReviewStore, reviewId: string, workspaceRoot: vscode.Uri) {
+  constructor(
+    store: ReviewStore,
+    reviewId: string,
+    workspaceRoot: vscode.Uri,
+    onStateChange?: () => void
+  ) {
     this.store = store;
     this.reviewId = reviewId;
     this.workspaceRoot = workspaceRoot;
+    this.onStateChange = onStateChange;
 
     const safePath = workspaceRoot.fsPath
       .replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -272,6 +280,7 @@ export class ReviewCommentController implements vscode.Disposable {
       thread.canReply = false;
 
       this.comments.set(storeComment.id, comment);
+      this.onStateChange?.();
     } catch (err) {
       logger.error(`Failed to create comment: ${err}`);
       vscode.window.showErrorMessage(
@@ -338,6 +347,7 @@ export class ReviewCommentController implements vscode.Disposable {
       thread.canReply = false;
 
       this.comments.set(storeComment.id, comment);
+      this.onStateChange?.();
     } catch (err) {
       logger.error(`Failed to create suggestion: ${err}`);
       vscode.window.showErrorMessage(
@@ -385,6 +395,7 @@ export class ReviewCommentController implements vscode.Disposable {
     const thread = comment.parent;
     thread.comments = thread.comments.filter((c) => c !== comment);
     this.comments.delete(comment.commentId);
+    this.onStateChange?.();
 
     if (thread.comments.length === 0) {
       thread.dispose();
@@ -417,8 +428,17 @@ export class ReviewCommentController implements vscode.Disposable {
 
   // Helpers
 
+  getAuthorName(): string {
+    return (
+      process.env.USER ||
+      process.env.USERNAME ||
+      os.userInfo().username ||
+      'Reviewer'
+    );
+  }
+
   private getAuthorInfo(): vscode.CommentAuthorInformation {
-    return { name: 'Reviewer' };
+    return { name: this.getAuthorName() };
   }
 
   private createThreadForComment(storeComment: ReviewComment): void {
@@ -457,10 +477,6 @@ export class ReviewCommentController implements vscode.Disposable {
   }
 
   private getRelativePath(uri: vscode.Uri): string | undefined {
-    const folder = vscode.workspace.getWorkspaceFolder(uri);
-    if (folder?.uri.toString() !== this.workspaceRoot.toString()) {
-      return undefined;
-    }
     const rel = path.relative(this.workspaceRoot.fsPath, uri.fsPath);
     if (rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
     return rel.replace(/\\/g, '/');

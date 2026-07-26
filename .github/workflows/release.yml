@@ -26,6 +26,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check Lint & Types
+        run: |
+          pnpm run check
+          pnpm run compile
+
+      - name: Run Integration Tests
+        run: xvfb-run -a pnpm test
+
       - name: Package VSIX
         run: pnpm run package
 

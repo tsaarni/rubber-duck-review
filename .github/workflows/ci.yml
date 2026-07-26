@@ -7,8 +7,10 @@ on:
     branches: [ main ]
 
 jobs:
-  check:
+  test:
+    name: Lint & Integration Tests
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -24,8 +26,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting and lints
-        run: pnpm run check
+      - name: Check Lint & Types
+        run: |
+          pnpm run check
+          pnpm run compile
 
-      - name: Package extension (compiles & packages)
-        run: pnpm run package
+      - name: Run Integration Tests
+        run: xvfb-run -a pnpm test

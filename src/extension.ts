@@ -378,7 +378,10 @@ async function handleCreateSuggestion(): Promise<void> {
   await mgr.createSuggestion(editor.document.uri, range, selectedText);
 }
 
-async function handleCreateFileComment(uri?: vscode.Uri): Promise<void> {
+async function handleCreateFileComment(
+  arg?: vscode.Uri | vscode.Uri[]
+): Promise<void> {
+  const uri = Array.isArray(arg) ? arg[0] : arg;
   const mgr = await resolveManagerForCommand();
   if (!mgr) return;
   await mgr.createFileComment(uri);

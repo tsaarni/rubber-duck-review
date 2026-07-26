@@ -45,8 +45,16 @@
           "type": "string",
           "format": "uuid"
         },
+        "branch": {
+          "description": "Current active git branch name, or null if detached HEAD or not a git repository.",
+          "type": ["string", "null"]
+        },
+        "baseBranch": {
+          "description": "Target default or base branch (e.g. 'origin/main'), or null if no remote base exists.",
+          "type": ["string", "null"]
+        },
         "baseCommit": {
-          "description": "Base commit with SHA and first line of message, or null if no git repository or no base could be determined.",
+          "description": "Base commit with SHA and first line of message, or null if no base could be determined.",
           "oneOf": [{ "$ref": "#/$defs/commit" }, { "type": "null" }]
         },
         "headCommit": {

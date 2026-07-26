@@ -35,6 +35,8 @@ export interface ReviewComment {
 
 export interface Review {
   id: string;
+  branch: string | null;
+  baseBranch: string | null;
   baseCommit: CommitInfo | null;
   headCommit: CommitInfo | null;
   hasUncommittedChanges: boolean;
@@ -141,12 +143,16 @@ export class ReviewStore {
   // Mutation methods
 
   async createReview(
+    branch: string | null,
+    baseBranch: string | null,
     baseCommit: CommitInfo | null,
     headCommit: CommitInfo | null,
     hasUncommittedChanges: boolean
   ): Promise<Review> {
     const review: Review = {
       id: newUUID(),
+      branch,
+      baseBranch,
       baseCommit,
       headCommit,
       hasUncommittedChanges,
@@ -254,7 +260,8 @@ export class ReviewStore {
   // Generate a Markdown export of the review.
   async exportMarkdown(
     reviewId: string,
-    workspaceRoot: vscode.Uri
+    workspaceRoot: vscode.Uri,
+    author: string = 'Reviewer'
   ): Promise<string> {
     const review = this.getReview(reviewId);
     if (!review) {
@@ -269,17 +276,11 @@ export class ReviewStore {
     lines.push(`**Date:** ${formatExportDate(review.createdAt)}`);
 
     if (review.baseCommit) {
+      if (review.branch) {
+        lines.push(`**Branch:** \`${review.branch}\``);
+      }
       const shortSha = review.baseCommit.id.slice(0, 7);
-      lines.push(`**Base:** \`${shortSha}\` ("${review.baseCommit.message}")`);
-    }
-    if (review.headCommit) {
-      const shortSha = review.headCommit.id.slice(0, 7);
-      const uncommitted = review.hasUncommittedChanges
-        ? ' (with uncommitted changes)'
-        : '';
-      lines.push(
-        `**Head:** \`${shortSha}\` ("${review.headCommit.message}"${uncommitted})`
-      );
+      lines.push(`**Base:** \`${shortSha}\``);
     }
     lines.push('');
 
@@ -306,7 +307,7 @@ export class ReviewStore {
       // Comment body in blockquote
       const escapedBody = escapeForBlockquote(comment.body);
       lines.push(
-        'Reviewer wrote:',
+        `${author} wrote:`,
         `> ${escapedBody.replaceAll('\n', '\n> ')}`,
         ''
       );

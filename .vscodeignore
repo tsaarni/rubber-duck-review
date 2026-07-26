@@ -13,3 +13,5 @@ README.md
 media/duck.svg
 media/rubber-duck-review-logo.png
 reviews-schema.json
+.vscode-test.mjs
+tests/**

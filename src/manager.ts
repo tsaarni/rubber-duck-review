@@ -255,9 +255,11 @@ export class ReviewManager implements vscode.Disposable {
 
     let markdown: string;
     try {
+      const author = this.controller?.getAuthorName();
       markdown = await this.store.exportMarkdown(
         this.activeReviewId,
-        this.workspaceRoot
+        this.workspaceRoot,
+        author
       );
     } catch (err) {
       logger.error(`Export failed: ${err}`);
@@ -289,16 +291,26 @@ export class ReviewManager implements vscode.Disposable {
   }
 
   private async determineCommitContext(): Promise<{
+    branch: string | null;
+    baseBranch: string | null;
     baseCommit: CommitInfo | null;
     headCommit: CommitInfo | null;
     isDirty: boolean;
   }> {
     if (!this.gitContext) {
-      return { baseCommit: null, headCommit: null, isDirty: false };
+      return {
+        branch: null,
+        baseBranch: null,
+        baseCommit: null,
+        headCommit: null,
+        isDirty: false,
+      };
     }
 
     try {
       const isDirty = await this.gitContext.isDirty();
+      const branch = (await this.gitContext.getCurrentBranch()) ?? null;
+      const baseBranch = (await this.gitContext.getDefaultBranch()) ?? null;
       let headCommit: CommitInfo | null = null;
       let baseCommit: CommitInfo | null = null;
 
@@ -308,42 +320,44 @@ export class ReviewManager implements vscode.Disposable {
         // No commits yet
       }
 
-      if (headCommit) {
-        const defaultBranch = await this.gitContext.getDefaultBranch();
-        if (defaultBranch) {
-          const mergeBase = await this.gitContext.getMergeBase(
-            headCommit.id,
-            defaultBranch
-          );
-          if (mergeBase) {
-            try {
-              baseCommit = await this.gitContext.getCommit(mergeBase);
-            } catch {
-              baseCommit = { id: mergeBase, message: '' };
-            }
-          } else {
-            baseCommit = headCommit;
+      if (headCommit && baseBranch) {
+        const mergeBase = await this.gitContext.getMergeBase(
+          headCommit.id,
+          baseBranch
+        );
+        if (mergeBase) {
+          try {
+            baseCommit = await this.gitContext.getCommit(mergeBase);
+          } catch {
+            baseCommit = { id: mergeBase, message: '' };
           }
-        } else {
-          // No remote — use HEAD as base. Working-tree changes are tracked via isDirty.
-          baseCommit = headCommit;
         }
       }
 
-      return { baseCommit, headCommit, isDirty };
+      return { branch, baseBranch, baseCommit, headCommit, isDirty };
     } catch (err) {
       logger.warn(`Failed to determine git context: ${err}`);
-      return { baseCommit: null, headCommit: null, isDirty: false };
+      return {
+        branch: null,
+        baseBranch: null,
+        baseCommit: null,
+        headCommit: null,
+        isDirty: false,
+      };
     }
   }
 
   private async createNewReview(commitCtx: {
+    branch: string | null;
+    baseBranch: string | null;
     baseCommit: CommitInfo | null;
     headCommit: CommitInfo | null;
     isDirty: boolean;
   }): Promise<void> {
     try {
       const review = await this.store.createReview(
+        commitCtx.branch,
+        commitCtx.baseBranch,
         commitCtx.baseCommit,
         commitCtx.headCommit,
         commitCtx.isDirty
@@ -364,7 +378,8 @@ export class ReviewManager implements vscode.Disposable {
     const controller = new ReviewCommentController(
       this.store,
       reviewId,
-      this.workspaceRoot
+      this.workspaceRoot,
+      this.onStateChange
     );
 
     await controller.initialize();

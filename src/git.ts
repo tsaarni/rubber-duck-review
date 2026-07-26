@@ -1,6 +1,7 @@
 // Git integration: commit info, merge-base, default branch, dirty check, and author identity.
 
 import { execFile } from 'node:child_process';
+import * as fs from 'node:fs';
 import type * as vscode from 'vscode';
 
 export interface CommitInfo {
@@ -12,6 +13,7 @@ export interface GitContext {
   getCommit(ref: string): Promise<CommitInfo>;
   getMergeBase(a: string, b: string): Promise<string | undefined>;
   getDefaultBranch(): Promise<string | undefined>;
+  getCurrentBranch(): Promise<string | undefined>;
   isDirty(): Promise<boolean>;
 }
 
@@ -36,7 +38,13 @@ export async function getGitContext(
   const cwd = workspaceFolder.fsPath;
 
   try {
-    await git(cwd, 'rev-parse', '--is-inside-work-tree');
+    const { stdout } = await git(cwd, 'rev-parse', '--show-toplevel');
+    const realCwd = fs.realpathSync(cwd);
+    const realToplevel = fs.realpathSync(stdout.trim());
+
+    if (realToplevel.toLowerCase() !== realCwd.toLowerCase()) {
+      return undefined;
+    }
   } catch {
     return undefined;
   }
@@ -66,6 +74,16 @@ export async function getGitContext(
         } catch {}
       }
       return undefined;
+    },
+
+    async getCurrentBranch(): Promise<string | undefined> {
+      try {
+        const { stdout } = await git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD');
+        const branch = stdout.trim();
+        return branch === 'HEAD' ? undefined : branch;
+      } catch {
+        return undefined;
+      }
     },
 
     async isDirty(): Promise<boolean> {

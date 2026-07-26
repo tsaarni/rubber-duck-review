@@ -10,6 +10,9 @@ media/*.woff
 .vscode/reviews.json
 review-export.md
 
+# VS Code test runner downloaded binaries and state
+.vscode-test/
+
 # OS & Editor files
 .DS_Store
 .vscode/extensions.json

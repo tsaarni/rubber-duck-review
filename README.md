@@ -22,8 +22,8 @@ Export comments with **Rubber Duck: Export Review as Markdown**. Here is an exam
 # Code Review: rubber-duck-review
 
 **Date:** 2026-07-20 14:16:56 UTC
-**Base:** `1c5d56d` ("update")
-**Head:** `1c5d56d` ("update" (with uncommitted changes))
+**Branch:** `main`
+**Base:** `1c5d56d`
 
 > **Note:** Line numbers may differ from the current file.
 
@@ -36,7 +36,7 @@ Export comments with **Rubber Duck: Export Review as Markdown**. Here is an exam
     statusBarItem.text = '$(comment-discussion) Start Review';
 ```
 
-Reviewer wrote:
+tsaarni wrote:
 > This should have duck icon instead of comment-discussion (speech bubble).
 ````
 
@@ -60,7 +60,8 @@ Reviewer wrote:
 
 ## Installation
 
-This extension is mainly for personal use. If you want to use it, you can install it from the latest GitHub release.
+At the moment this extension is mainly for personal use, so you cannot find it in marketplace.
+If you want to try it, you can install it from the latest GitHub release.
 
 ```bash
 curl -fsSL -o rubber-duck-review.vsix https://github.com/tsaarni/rubber-duck-review/releases/latest/download/rubber-duck-review.vsix
